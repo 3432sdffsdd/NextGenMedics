@@ -1,23 +1,28 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, Navigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { FiMail, FiLock, FiEye, FiEyeOff, FiArrowLeft, FiAlertCircle } from 'react-icons/fi'
 import { useAuth } from '../context/AuthContext'
+import { dashboardPathByRole } from '../services/api'
 import Logo from '../components/common/Logo'
 
 export default function Login() {
-  const { login, loading } = useAuth()
+  const { login, loading, user } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState({ email: '', password: '' })
   const [showPwd, setShowPwd] = useState(false)
   const [error, setError] = useState('')
+
+  if (user) {
+    return <Navigate to={dashboardPathByRole[user.role] || '/'} replace />
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     const res = await login(form.email, form.password)
     if (res.success) {
-      navigate('/')
+      navigate(dashboardPathByRole[res.user.role] || '/')
     } else {
       setError(res.message)
     }
@@ -72,9 +77,9 @@ export default function Login() {
             <Logo />
           </div>
 
-          <h1 className="mt-6 font-display text-3xl font-extrabold text-navy">Student Login</h1>
+          <h1 className="mt-6 font-display text-3xl font-extrabold text-navy">Login</h1>
           <p className="mt-2 text-slate-500">
-            Enter the credentials provided by your administrator.
+            Sign in with your administrator, teacher, or student account.
           </p>
 
           {error && (
@@ -137,7 +142,7 @@ export default function Login() {
           </form>
 
           <p className="mt-6 rounded-xl bg-lightbg px-4 py-3 text-center text-sm text-slate-500">
-            Students cannot self-register. Contact your administrator to receive login credentials.
+            Accounts are created by an administrator. Contact support if you need access.
           </p>
         </motion.div>
       </div>

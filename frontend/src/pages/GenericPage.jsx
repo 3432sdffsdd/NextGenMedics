@@ -52,7 +52,7 @@ export default function GenericPage({ section }) {
             <h3 className="mt-6 font-display text-2xl font-bold text-navy">Coming Soon</h3>
             <div className="mt-7 flex flex-wrap justify-center gap-4">
               <Link to="/login" className="btn-primary">
-                Student Login <FiArrowRight />
+                Login <FiArrowRight />
               </Link>
               <Link to="/contact" className="btn-secondary">Contact Us</Link>
             </div>

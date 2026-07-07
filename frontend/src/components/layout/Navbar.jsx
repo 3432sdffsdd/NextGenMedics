@@ -3,9 +3,12 @@ import { Link, NavLink, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FiChevronDown, FiMenu, FiX, FiArrowRight } from 'react-icons/fi'
 import { navMenu } from '../../data/siteData'
+import { useAuth } from '../../context/AuthContext'
+import { dashboardPathByRole } from '../../services/api'
 import Logo from '../common/Logo'
 
 export default function Navbar() {
+  const { user, logout } = useAuth()
   const [scrolled, setScrolled] = useState(false)
   const [openMenu, setOpenMenu] = useState(null)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -105,9 +108,27 @@ export default function Navbar() {
         </ul>
 
         <div className="flex items-center gap-3">
-          <Link to="/login" className="hidden btn-primary !py-2.5 !px-6 text-sm sm:inline-flex">
-            Student Login
-          </Link>
+          {user ? (
+            <>
+              <Link
+                to={dashboardPathByRole[user.role] || '/'}
+                className="hidden text-sm font-semibold text-navy hover:text-primary sm:inline"
+              >
+                Dashboard
+              </Link>
+              <button
+                type="button"
+                onClick={logout}
+                className="hidden btn-ghost !py-2.5 !px-4 text-sm sm:inline-flex"
+              >
+                Logout
+              </button>
+            </>
+          ) : (
+            <Link to="/login" className="hidden btn-primary !py-2.5 !px-6 text-sm sm:inline-flex">
+              Login
+            </Link>
+          )}
           <button
             className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-navy lg:hidden"
             onClick={() => setMobileOpen((v) => !v)}
@@ -167,9 +188,20 @@ export default function Navbar() {
                   )}
                 </div>
               ))}
-              <Link to="/login" className="btn-primary mt-4 w-full">
-                Student Login
-              </Link>
+              {user ? (
+                <>
+                  <Link to={dashboardPathByRole[user.role] || '/'} className="btn-primary mt-4 w-full">
+                    Dashboard
+                  </Link>
+                  <button type="button" onClick={logout} className="btn-ghost mt-2 w-full">
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <Link to="/login" className="btn-primary mt-4 w-full">
+                  Login
+                </Link>
+              )}
             </div>
           </motion.div>
         )}

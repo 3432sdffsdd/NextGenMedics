@@ -1,0 +1,6 @@
+/vendor/
+.env
+/storage/cache/*
+!/storage/cache/.gitignore
+/storage/uploads/*
+!/storage/uploads/.gitignore

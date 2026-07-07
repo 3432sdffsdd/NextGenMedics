@@ -1,0 +1,88 @@
+/* Theme FullCalendar to match the LMS SaaS look */
+.ngm-calendar {
+  --fc-border-color: #e2e8f0;
+  --fc-today-bg-color: #eff6ff;
+  --fc-neutral-bg-color: #f8fafc;
+  --fc-page-bg-color: #ffffff;
+  --fc-button-bg-color: #ffffff;
+  --fc-button-border-color: #e2e8f0;
+  --fc-button-text-color: #334155;
+  --fc-button-hover-bg-color: #f1f5f9;
+  --fc-button-hover-border-color: #cbd5e1;
+  --fc-button-active-bg-color: #2563eb;
+  --fc-button-active-border-color: #2563eb;
+  font-family: inherit;
+}
+
+.ngm-calendar .fc .fc-toolbar-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.ngm-calendar .fc .fc-button {
+  border-radius: 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.4rem 0.75rem;
+  box-shadow: none;
+  text-transform: capitalize;
+}
+
+.ngm-calendar .fc .fc-button-primary:not(:disabled).fc-button-active,
+.ngm-calendar .fc .fc-button-primary:not(:disabled):active {
+  color: #fff;
+}
+
+.ngm-calendar .fc .fc-button:focus {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+
+.ngm-calendar .fc-theme-standard th {
+  padding: 0.5rem 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748b;
+}
+
+.ngm-calendar .fc .fc-daygrid-day-number,
+.ngm-calendar .fc .fc-col-header-cell-cushion {
+  color: #334155;
+  text-decoration: none;
+}
+
+.ngm-calendar .fc-event {
+  border: none;
+  border-radius: 0.45rem;
+  padding: 1px 2px;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.ngm-calendar .fc-event:hover {
+  filter: brightness(0.95);
+}
+
+.ngm-calendar .fc .fc-list-event:hover td {
+  background: #f8fafc;
+}
+
+.ngm-calendar .ngm-ev {
+  padding: 2px 4px;
+  overflow: hidden;
+}
+.ngm-calendar .ngm-ev-title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ngm-calendar .ngm-ev-meta {
+  font-size: 0.66rem;
+  opacity: 0.9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
