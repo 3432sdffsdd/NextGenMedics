@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { FiPlus, FiEdit2, FiTrash2, FiLock, FiUnlock, FiUsers, FiFileText, FiDownload, FiEye } from 'react-icons/fi'
+import { FiPlus, FiEdit2, FiTrash2, FiLock, FiUnlock, FiUsers, FiFileText, FiDownload, FiEye, FiLink } from 'react-icons/fi'
 import { assignmentService, downloadMedia } from '../../services/api'
 import { useToast } from '../../context/ToastContext'
 import { useConfirm } from '../../context/ConfirmContext'
@@ -7,7 +7,7 @@ import { Modal, Button, Badge, EmptyState } from '../../components/ui'
 import MultiFileUploadField from '../../components/dashboard/MultiFileUploadField'
 import ViewFileButton from '../../components/dashboard/ViewFileButton'
 import AssignmentHtmlImport from '../../components/dashboard/AssignmentHtmlImport'
-import { ACCEPT_ALL, formatDateTime, appendTitledFiles } from '../../utils/files'
+import { ACCEPT_ALL, formatDateTime, appendTitledFiles, normalizeExternalUrl } from '../../utils/files'
 
 const STATUS_TONE = { draft: 'neutral', published: 'success', closed: 'warning' }
 const empty = { title: '', description: '', instructions: '', due_date: '', max_marks: 100, assignment_type: 'file', external_url: '' }
@@ -28,9 +28,19 @@ export default function AssignmentManager({ courseId }) {
   const [submissionsFor, setSubmissionsFor] = useState(null)
 
   const load = useCallback(() => {
+    if (!courseId || Number.isNaN(Number(courseId))) {
+      setItems([])
+      setLoading(false)
+      return
+    }
     setLoading(true)
-    assignmentService.list(courseId).then(({ data }) => setItems(data.data || [])).finally(() => setLoading(false))
-  }, [courseId])
+    assignmentService.list(courseId)
+      .then(({ data }) => setItems(data.data || []))
+      .catch((err) => {
+        toast.error(err.response?.data?.message || 'Could not load assignments for this course')
+      })
+      .finally(() => setLoading(false))
+  }, [courseId, toast])
 
   useEffect(() => { load() }, [load])
 
@@ -56,11 +66,15 @@ export default function AssignmentManager({ courseId }) {
 
   const buildFormData = () => {
     const fd = new FormData()
-    Object.entries(form).forEach(([k, v]) => fd.append(k, v))
+    Object.entries(form).forEach(([k, v]) => {
+      fd.append(k, k === 'external_url' ? normalizeExternalUrl(v) : v)
+    })
     if (form.assignment_type === 'interactive_test') {
       if (htmlFile) fd.append('attachment', htmlFile)
     } else {
       appendTitledFiles(fd, attachFiles)
+      const n = attachFiles.filter((x) => x?.file).length
+      if (n > 0) fd.append('expected_files', String(n))
     }
     return fd
   }
@@ -71,6 +85,9 @@ export default function AssignmentManager({ courseId }) {
     }
     if (!form.title.trim()) return toast.error('Title is required')
     if (!form.due_date) return toast.error('Assignment deadline is required')
+    if (form.assignment_type !== 'interactive_test' && attachFiles.length > 0 && attachFiles.some((x) => !(x.title || '').trim())) {
+      return toast.error('Give each attachment a title before saving')
+    }
     if (form.assignment_type === 'interactive_test' && !editing?.id && !htmlFile && !form.external_url.trim()) {
       return toast.error('Upload an HTML file or enter a link for the interactive test')
     }
@@ -85,8 +102,16 @@ export default function AssignmentManager({ courseId }) {
       } else {
         const fd = buildFormData()
         fd.append('course_id', String(courseId))
-        await assignmentService.create(fd, onProg)
-        toast.success('Assignment created successfully')
+        const { data } = await assignmentService.create(fd, onProg)
+        if (!data?.success) {
+          throw new Error(data?.message || 'Create failed')
+        }
+        const created = data.data
+        if (!created?.id) {
+          throw new Error('Assignment was not returned by the server. Refresh the page.')
+        }
+        setItems((prev) => [created, ...prev.filter((a) => a.id !== created.id)])
+        toast.success(data.message || 'Assignment created successfully')
       }
       setEditing(null)
       setHtmlPreview(null)
@@ -97,7 +122,7 @@ export default function AssignmentManager({ courseId }) {
       const detail = fieldErrors
         ? Object.values(fieldErrors).flat().join(' ')
         : null
-      toast.error(detail || msg || 'Could not save assignment')
+      toast.error(detail || msg || err.message || 'Could not save assignment')
     } finally { setSaving(false) }
   }
 
@@ -142,6 +167,11 @@ export default function AssignmentManager({ courseId }) {
 
   return (
     <div className="space-y-4">
+      {(!courseId || Number.isNaN(Number(courseId))) && (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Invalid course link — go to <strong>My Courses</strong>, open a course, then open the <strong>Assignments</strong> tab.
+        </p>
+      )}
       <div className="flex items-center justify-between">
         <h3 className="font-display text-lg font-bold text-navy">Assignments</h3>
         <Button icon={FiPlus} onClick={openNew}>New assignment</Button>
@@ -160,7 +190,7 @@ export default function AssignmentManager({ courseId }) {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-navy">{a.title}</p>
-                    <Badge tone={STATUS_TONE[a.status] || 'slate'}>{a.status}</Badge>
+                    <Badge tone={STATUS_TONE[a.status] || 'neutral'}>{a.status}</Badge>
                     {a.assignment_type === 'interactive_test' && (
                       <Badge tone="purple">MCQ test · {a.question_count || 0} Q</Badge>
                     )}
@@ -170,7 +200,10 @@ export default function AssignmentManager({ courseId }) {
                     <p className="mt-1 text-xs font-medium text-amber-700">Hidden from students — click Publish below</p>
                   )}
                   {a.assignment_type !== 'interactive_test' && (
-                    <AttachmentLinks attachments={a.attachments} legacyPath={a.attachment_path} />
+                    <>
+                      <AttachmentLinks attachments={a.attachments} legacyPath={a.attachment_path} />
+                      {a.external_url && <ExternalResourceLink url={a.external_url} />}
+                    </>
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -275,6 +308,20 @@ export default function AssignmentManager({ courseId }) {
                   hint="Add one or more files — each needs a title for students"
                 />
               </div>
+              <div className="mt-4">
+                <label className="text-sm font-medium text-slate-600">External resource link (optional)</label>
+                <div className="relative mt-1">
+                  <FiLink className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="url"
+                    value={form.external_url}
+                    onChange={(e) => setForm((f) => ({ ...f, external_url: e.target.value }))}
+                    placeholder="https://example.com/reference"
+                    className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm"
+                  />
+                </div>
+                <p className="mt-1 text-xs text-slate-400">Optional link to an article, video, or reference page for students.</p>
+              </div>
             </div>
           )}
         </div>
@@ -291,7 +338,10 @@ export default function AssignmentManager({ courseId }) {
               <span>Status: {preview.status}</span>
             </div>
             {preview.assignment_type !== 'interactive_test' && (
-              <AttachmentLinks attachments={preview.attachments} legacyPath={preview.attachment_path} />
+              <>
+                <AttachmentLinks attachments={preview.attachments} legacyPath={preview.attachment_path} />
+                {preview.external_url && <ExternalResourceLink url={preview.external_url} />}
+              </>
             )}
           </div>
         )}
@@ -390,6 +440,21 @@ function SubmissionRow({ s, onGrade, onDelete }) {
         </div>
       </td>
     </tr>
+  )
+}
+
+function ExternalResourceLink({ url, compact = false }) {
+  const href = normalizeExternalUrl(url)
+  if (!href) return null
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className={`inline-flex items-center gap-1.5 font-medium text-violet-600 hover:underline ${compact ? 'text-xs' : 'text-sm mt-2'}`}
+    >
+      <FiLink size={compact ? 13 : 14} /> Open external resource
+    </a>
   )
 }
 

@@ -150,6 +150,7 @@ class CourseController extends BaseController
     {
         $user = $request->user();
         $courses = match ($user['role']) {
+            'admin'   => $this->courses->listAll(1, 200)['items'] ?? [],
             'teacher' => $this->courses->listByTeacher($user['id']),
             'student' => $this->courses->listByStudent($user['id']),
             default   => [],

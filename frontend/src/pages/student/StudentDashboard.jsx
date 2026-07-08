@@ -1,12 +1,48 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FiZap, FiTarget, FiBookOpen, FiAlertCircle, FiCalendar, FiRefreshCw } from 'react-icons/fi'
-import { premiumStudyService, dashboardService, myCoursesService, progressService } from '../../services/api'
+import { FiZap, FiTarget, FiBookOpen, FiAlertCircle, FiCalendar, FiRefreshCw, FiBell, FiBookmark, FiChevronDown, FiArchive } from 'react-icons/fi'
+import { premiumStudyService, dashboardService, myCoursesService, progressService, announcementsService } from '../../services/api'
 import StatCard from '../../components/dashboard/StatCard'
 import StreakWidget from '../../components/dashboard/StreakWidget'
 import ProgressBar from '../../components/dashboard/ProgressBar'
 import McqPlayer from '../../components/dashboard/McqPlayer'
 import { useAuth } from '../../context/AuthContext'
+import { formatDateTime } from '../../utils/files'
+import { Badge } from '../../components/ui'
+
+const RECENT_ANNOUNCEMENT_LIMIT = 5
+
+function AnnouncementCard({ a }) {
+  return (
+    <article
+      className={`rounded-xl border p-4 ${a.is_pinned ? 'border-primary/30 bg-primary/5' : 'border-slate-100 bg-white'}`}
+    >
+      <div className="flex flex-wrap items-start gap-2">
+        {a.is_pinned && <FiBookmark className="mt-0.5 shrink-0 fill-primary text-primary" size={16} />}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-semibold text-navy">{a.title}</h3>
+            {a.priority === 'urgent' && <Badge tone="danger">Urgent</Badge>}
+            {a.priority === 'high' && <Badge tone="warning">Important</Badge>}
+            {a.course_title && (
+              <span className="text-xs font-medium text-slate-500">
+                {a.course_id ? (
+                  <Link to={`/student/courses/${a.course_id}`} className="text-primary hover:underline">
+                    {a.course_title}
+                  </Link>
+                ) : a.course_title}
+              </span>
+            )}
+          </div>
+          <p className="mt-2 whitespace-pre-line text-sm text-slate-600">{a.content}</p>
+          <p className="mt-2 text-xs text-slate-400">
+            {a.author_name ? `${a.author_name} · ` : ''}{formatDateTime(a.published_at)}
+          </p>
+        </div>
+      </div>
+    </article>
+  )
+}
 
 function Countdown({ seconds }) {
   const [left, setLeft] = useState(seconds)
@@ -29,6 +65,8 @@ export default function StudentDashboard() {
   const [revision, setRevision] = useState(null)
   const [revisionSummary, setRevisionSummary] = useState(null)
   const [startingRevision, setStartingRevision] = useState(false)
+  const [announcements, setAnnouncements] = useState([])
+  const [showArchived, setShowArchived] = useState(false)
   const revisionStart = useRef(Date.now())
 
   useEffect(() => {
@@ -36,7 +74,16 @@ export default function StudentDashboard() {
     myCoursesService.list().then(({ data }) => setCourses(data.data || [])).catch(() => {})
     premiumStudyService.dashboard().then(({ data }) => setPremium(data.data)).catch(() => {})
     progressService.ping('login').catch(() => {})
+    announcementsService.list({ per_page: 50 })
+      .then(({ data }) => {
+        const rows = Array.isArray(data.data) ? data.data : (data.data?.items || [])
+        setAnnouncements(rows)
+      })
+      .catch(() => {})
   }, [])
+
+  const recentAnnouncements = announcements.slice(0, RECENT_ANNOUNCEMENT_LIMIT)
+  const archivedAnnouncements = announcements.slice(RECENT_ANNOUNCEMENT_LIMIT)
 
   const startRevision = async () => {
     setStartingRevision(true)
@@ -114,6 +161,43 @@ export default function StudentDashboard() {
   return (
     <div>
       <p className="text-slate-500">Welcome, {user?.full_name}. Your personalized FCPS study hub.</p>
+
+      {announcements.length > 0 && (
+        <section className="mt-6 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 via-white to-white p-5 shadow-soft">
+          <div className="flex items-center gap-2">
+            <FiBell className="text-primary" size={20} />
+            <h2 className="font-display text-lg font-bold text-navy">Announcements</h2>
+          </div>
+          <div className="mt-4 space-y-3">
+            {recentAnnouncements.map((a) => (
+              <AnnouncementCard key={a.id} a={a} />
+            ))}
+          </div>
+
+          {archivedAnnouncements.length > 0 && (
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <button
+                type="button"
+                onClick={() => setShowArchived((v) => !v)}
+                className="flex w-full items-center justify-between rounded-xl border border-slate-100 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+              >
+                <span className="inline-flex items-center gap-2">
+                  <FiArchive size={16} className="text-slate-400" />
+                  Archived ({archivedAnnouncements.length})
+                </span>
+                <FiChevronDown size={18} className={`text-slate-400 transition-transform ${showArchived ? 'rotate-180' : ''}`} />
+              </button>
+              {showArchived && (
+                <div className="mt-3 space-y-3">
+                  {archivedAnnouncements.map((a) => (
+                    <AnnouncementCard key={a.id} a={a} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       <button
         type="button"

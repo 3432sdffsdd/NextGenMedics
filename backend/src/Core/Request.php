@@ -101,17 +101,70 @@ class Request
 
     public function file(string $key): ?array
     {
-        return $_FILES[$key] ?? null;
+        foreach ([$key, "{$key}[]"] as $candidate) {
+            $f = $_FILES[$candidate] ?? null;
+            if (!$f) {
+                continue;
+            }
+            if (!is_array($f['name'] ?? null)) {
+                if (($f['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+                    continue;
+                }
+                return $f;
+            }
+            foreach ($f['name'] as $i => $name) {
+                if (($f['error'][$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                    return [
+                        'name'     => $name,
+                        'type'     => $f['type'][$i] ?? '',
+                        'tmp_name' => $f['tmp_name'][$i] ?? '',
+                        'error'    => $f['error'][$i] ?? UPLOAD_ERR_NO_FILE,
+                        'size'     => $f['size'][$i] ?? 0,
+                    ];
+                }
+            }
+        }
+        return null;
     }
 
     /** @return array<int, array{name:string,type:string,tmp_name:string,error:int,size:int}> */
     public function files(string $key): array
     {
-        $f = $_FILES[$key] ?? null;
-        if (!$f) {
+        foreach ([$key, "{$key}[]"] as $candidate) {
+            $normalized = $this->normalizeUploadedFiles($_FILES[$candidate] ?? null);
+            if ($normalized) {
+                return $normalized;
+            }
+        }
+        return [];
+    }
+
+    /** @return array<int, string> */
+    public function arrayInput(string $key): array
+    {
+        $body = $this->body();
+        foreach ([$key, "{$key}[]"] as $candidate) {
+            if (!array_key_exists($candidate, $body)) {
+                continue;
+            }
+            $value = $body[$candidate];
+            if (is_array($value)) {
+                return array_values(array_map(static fn($v) => (string) $v, $value));
+            }
+            if ($value !== null && $value !== '') {
+                return [(string) $value];
+            }
+        }
+        return [];
+    }
+
+    /** @param array<string,mixed>|null $f */
+    private function normalizeUploadedFiles(?array $f): array
+    {
+        if (!$f || !isset($f['name'])) {
             return [];
         }
-        if (!is_array($f['name'] ?? null)) {
+        if (!is_array($f['name'])) {
             if (($f['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
                 return [];
             }

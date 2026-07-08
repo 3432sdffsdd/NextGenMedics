@@ -47,11 +47,18 @@ export function formatDate(value) {
   return d.toLocaleDateString(undefined, { dateStyle: 'medium' })
 }
 
-/** Append multiple files + titles to FormData (PHP: files[] / file_titles[]). */
-export function appendTitledFiles(fd, items, { fileKey = 'files[]', titleKey = 'file_titles[]' } = {}) {
+/** Append multiple files + titles to FormData (PHP reads `files[]` / `file_titles[]`). */
+export function appendTitledFiles(fd, items, { fileKey = 'files', titleKey = 'file_titles' } = {}) {
   ;(items || []).forEach((item) => {
     if (!item?.file) return
-    fd.append(fileKey, item.file)
-    fd.append(titleKey, (item.title || '').trim() || item.file.name)
+    fd.append(`${fileKey}[]`, item.file)
+    fd.append(`${titleKey}[]`, (item.title || '').trim() || item.file.name)
   })
+}
+
+export function normalizeExternalUrl(value = '') {
+  const url = String(value || '').trim()
+  if (!url) return ''
+  if (/^https?:\/\//i.test(url)) return url
+  return `https://${url.replace(/^\/+/, '')}`
 }

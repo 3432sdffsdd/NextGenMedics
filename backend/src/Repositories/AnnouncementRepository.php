@@ -33,11 +33,17 @@ class AnnouncementRepository extends BaseRepository
             return $this->paginate($sql, [$userId, $userId], $page, $perPage);
         }
 
-        $sql = 'SELECT a.*, c.title AS course_title FROM announcements a
+        $sql = 'SELECT a.*, CONCAT(u.first_name, " ", u.last_name) AS author_name, c.title AS course_title
+                FROM announcements a
+                JOIN users u ON u.id = a.author_id
                 LEFT JOIN courses c ON c.id = a.course_id
-                WHERE a.course_id IS NULL OR a.course_id IN (
+                WHERE (a.course_id IS NULL OR a.course_id IN (
                     SELECT course_id FROM course_enrollments WHERE student_id = ? AND status = "active"
-                ) ORDER BY a.is_pinned DESC, a.published_at DESC';
+                ))
+                AND a.published_at IS NOT NULL
+                AND a.published_at <= NOW()
+                AND (a.expires_at IS NULL OR a.expires_at > NOW())
+                ORDER BY a.is_pinned DESC, a.published_at DESC';
         return $this->paginate($sql, [$userId], $page, $perPage);
     }
 

@@ -140,7 +140,7 @@ export const assignmentService = {
   create: (formData, onUploadProgress) => api.post('/assignments', formData, uploadCfg(onUploadProgress)),
   update: (id, formData, onUploadProgress) =>
     formData instanceof FormData
-      ? api.put(`/assignments/${id}`, formData, uploadCfg(onUploadProgress))
+      ? api.post(`/assignments/${id}/update`, formData, uploadCfg(onUploadProgress))
       : api.put(`/assignments/${id}`, formData),
   remove: (id) => api.delete(`/assignments/${id}`),
   deleteAttachment: (assignmentId, attachmentId) => api.delete(`/assignments/${assignmentId}/attachments/${attachmentId}`),
@@ -186,7 +186,7 @@ export const testimonialsService = {
 }
 
 export const announcementsService = {
-  list: () => api.get('/announcements'),
+  list: (params = {}) => api.get('/announcements', { params }),
   create: (data) => api.post('/announcements', data),
   update: (id, data) => api.put(`/announcements/${id}`, data),
   remove: (id) => api.delete(`/announcements/${id}`),

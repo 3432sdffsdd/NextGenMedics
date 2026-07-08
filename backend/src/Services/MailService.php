@@ -11,7 +11,7 @@ class MailService
             'Content-Type: text/html; charset=UTF-8',
             'MIME-Version: 1.0',
         ];
-        return mail($to, $subject, $body, implode("\r\n", $headers));
+        return @mail($to, $subject, $body, implode("\r\n", $headers));
     }
 
     public function sendNotification(string $to, string $title, string $message): bool

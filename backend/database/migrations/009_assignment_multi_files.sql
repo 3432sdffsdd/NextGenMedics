@@ -1,5 +1,4 @@
 -- Multiple titled files per assignment (teacher) and per submission (student)
-USE nextgen_medics;
 
 CREATE TABLE IF NOT EXISTS assignment_attachments (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

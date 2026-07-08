@@ -12,6 +12,7 @@ use App\Repositories\FlashcardRepository;
 use App\Repositories\McqRepository;
 use App\Services\AiGenerationService;
 use App\Services\CourseService;
+use App\Services\ExcelFlashcardParserService;
 use App\Services\ManualStudyImportService;
 use App\Services\NotificationService;
 
@@ -320,13 +321,20 @@ class AiController extends BaseController
 
         $file = $request->file('file');
         if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-            Response::error('Please upload an Excel file (.xlsx or .xls)', 422);
+            $code = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
+            $msg = $code === UPLOAD_ERR_INI_SIZE || $code === UPLOAD_ERR_FORM_SIZE
+                ? 'Excel file is too large for server upload limits'
+                : 'Please upload an Excel file (.xlsx or .xls)';
+            Response::error($msg, 422);
             return;
         }
 
         $ext = strtolower(pathinfo((string) ($file['name'] ?? ''), PATHINFO_EXTENSION));
-        if (!in_array($ext, ['xlsx', 'xls', 'csv'], true)) {
-            Response::error('Upload an .xlsx or .xls file with column A = Front and column B = Back.', 422);
+        if (!in_array($ext, ExcelFlashcardParserService::allowedExtensions(), true)) {
+            Response::error(
+                'Upload an Excel file: .xlsx (new) or .xls (old). Column A = Front, column B = Back.',
+                422
+            );
             return;
         }
 

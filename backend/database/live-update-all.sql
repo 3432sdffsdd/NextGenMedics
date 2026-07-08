@@ -18,8 +18,9 @@
 --   2. Replace YOUR_DB_NAME below with your actual database name
 -- ============================================================
 
--- >>> CHANGE THIS to your live database name <<<
-USE YOUR_DB_NAME;
+-- >>> CHANGE THIS to your live database name (backticks required if name has hyphens) <<<
+-- USE `nextgenmedics-3530353392cf`;
+USE `YOUR_DB_NAME`;
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;

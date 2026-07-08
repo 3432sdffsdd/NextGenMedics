@@ -136,6 +136,33 @@ class Application
 
         $this->container->singleton('App\Services\TextExtractionService', fn() => new \App\Services\TextExtractionService());
 
+        $this->container->singleton('App\Services\QuizWordParserService', fn() => new \App\Services\QuizWordParserService());
+        $this->container->singleton('App\Services\HtmlMcqParserService', function ($c) {
+            return new \App\Services\HtmlMcqParserService($c->get('App\Services\QuizWordParserService'));
+        });
+        $this->container->singleton('App\Services\AssignmentTestService', function ($c) {
+            return new \App\Services\AssignmentTestService(
+                $c->get('App\Repositories\AssignmentRepository'),
+                $c->get('App\Services\QuizWordParserService')
+            );
+        });
+        $this->container->singleton('App\Services\WordStudyPackParserService', function ($c) {
+            return new \App\Services\WordStudyPackParserService($c->get('App\Services\QuizWordParserService'));
+        });
+        $this->container->singleton('App\Services\ExcelFlashcardParserService', fn() => new \App\Services\ExcelFlashcardParserService());
+        $this->container->singleton('App\Services\ManualStudyImportService', function ($c) {
+            return new \App\Services\ManualStudyImportService(
+                $c->get('App\Services\WordStudyPackParserService'),
+                $c->get('App\Services\QuizWordParserService'),
+                $c->get('App\Services\HtmlMcqParserService'),
+                $c->get('App\Services\ExcelFlashcardParserService'),
+                $c->get('App\Services\TextExtractionService'),
+                $c->get('App\Repositories\AiContentRepository'),
+                $c->get('App\Repositories\FlashcardRepository'),
+                $c->get('App\Repositories\McqRepository')
+            );
+        });
+
         $this->container->singleton('App\Services\AiContentService', function ($c) {
             $config = require __DIR__ . '/../../config/config.php';
             return new \App\Services\AiContentService(

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { FiUpload, FiLink, FiEye } from 'react-icons/fi'
 import { assignmentService } from '../../services/api'
+import { normalizeExternalUrl } from '../../utils/files'
 import { useToast } from '../../context/ToastContext'
 import { Button } from '../ui'
 import FileUploadField from './FileUploadField'
@@ -17,7 +18,7 @@ export default function AssignmentHtmlImport({ externalUrl, onExternalUrl, htmlF
     try {
       const fd = new FormData()
       if (htmlFile) fd.append('attachment', htmlFile)
-      if (externalUrl.trim()) fd.append('external_url', externalUrl.trim())
+      if (externalUrl.trim()) fd.append('external_url', normalizeExternalUrl(externalUrl))
       const { data } = await assignmentService.parseHtml(fd)
       onPreview(data.data || { valid: [], invalid: [], summary: {} })
       const s = data.data?.summary || {}
@@ -49,7 +50,7 @@ export default function AssignmentHtmlImport({ externalUrl, onExternalUrl, htmlF
             type="url"
             value={externalUrl}
             onChange={(e) => onExternalUrl(e.target.value)}
-            placeholder="https://example.com/quiz.html"
+            placeholder="example.com/quiz.html or https://…"
             className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm"
           />
         </div>

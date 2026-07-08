@@ -123,6 +123,7 @@ $router->post('/assignments', [AssignmentController::class, 'store'], array_merg
 $router->post('/assignments/parse-html', [AssignmentController::class, 'parseHtml'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));
 $router->get('/assignments/{id}', [AssignmentController::class, 'show'], $auth);
 $router->put('/assignments/{id}', [AssignmentController::class, 'update'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));
+$router->post('/assignments/{id}/update', [AssignmentController::class, 'update'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));
 $router->delete('/assignments/{id}', [AssignmentController::class, 'destroy'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));
 $router->patch('/assignments/{id}/status', [AssignmentController::class, 'setStatus'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));
 $router->delete('/assignments/{id}/attachments/{attachmentId}', [AssignmentController::class, 'deleteAttachment'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));

@@ -491,13 +491,14 @@ export default function AiTutorPanel({ lectures = [] }) {
                 <p className="text-sm font-semibold text-navy">Excel file → Flashcards</p>
               </div>
               <p className="mt-1 text-xs text-slate-500">
-                <strong>.xlsx</strong> or older <strong>.xls</strong> supported. Column A = <strong>Front</strong>, column B = <strong>Back</strong>.
+                <strong>.xlsx</strong> (Excel 2007+) or older <strong>.xls</strong> (Excel 97–2003) — also .xlsm, .csv.
+                Column A = <strong>Front</strong>, column B = <strong>Back</strong>.
                 Row 1 can be headers (Front / Back). File name becomes the topic
                 {excelTopicHint ? <> (e.g. <em>{excelTopicHint}</em>)</> : ''}.
               </p>
               <input
                 type="file"
-                accept=".xlsx,.xls,.csv"
+                accept=".xlsx,.xls,.xlsm,.xltx,.xltm,.xlt,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 className="mt-3 block w-full text-sm"
                 onChange={(e) => setExcelFile(e.target.files?.[0] || null)}
               />

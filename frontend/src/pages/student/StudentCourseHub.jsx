@@ -13,8 +13,8 @@ import AssignmentTestRunner, { AssignmentTestResult, AssignmentTestReview } from
 import { EmptyState } from '../../components/ui'
 import Alert from '../../components/dashboard/Alert'
 import MultiFileUploadField from '../../components/dashboard/MultiFileUploadField'
-import { ACCEPT_ALL, appendTitledFiles } from '../../utils/files'
-import { FiHelpCircle, FiFileText, FiDownload } from 'react-icons/fi'
+import { ACCEPT_ALL, appendTitledFiles, normalizeExternalUrl } from '../../utils/files'
+import { FiHelpCircle, FiFileText, FiDownload, FiLink } from 'react-icons/fi'
 
 const TABS = ['learn', 'quizzes', 'assignments', 'live class', 'discussions', 'schedule', 'attendance']
 const BADGE_TABS = new Set(['quizzes', 'assignments', 'discussions'])
@@ -404,6 +404,16 @@ export default function StudentCourseHub() {
                           </div>
                         ))}
                       </div>
+                    )}
+                    {!isInteractive && a.external_url && (
+                      <a
+                        href={normalizeExternalUrl(a.external_url)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-violet-600 hover:underline"
+                      >
+                        <FiLink size={14} /> Open external resource
+                      </a>
                     )}
                     {sub && (
                       <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50/80 p-3 text-sm">

@@ -46,19 +46,26 @@ class AssignmentRepository extends BaseRepository
     public function create(array $data): int
     {
         if ($this->columnExists('assignments', 'assignment_type')) {
-            $stmt = $this->db->prepare(
-                'INSERT INTO assignments (course_id, teacher_id, title, description, instructions, due_date, max_marks, attachment_path, assignment_type, external_url, status)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?)'
-            );
-            $stmt->execute([
+            $columns = 'course_id, teacher_id, title, description, instructions, due_date, max_marks, attachment_path, assignment_type';
+            $placeholders = '?,?,?,?,?,?,?,?,?';
+            $values = [
                 $data['course_id'], $data['teacher_id'], $data['title'],
                 $data['description'] ?? null, $data['instructions'] ?? null,
                 $data['due_date'], $data['max_marks'] ?? 100,
                 $data['attachment_path'] ?? null,
                 $data['assignment_type'] ?? 'file',
-                $data['external_url'] ?? null,
-                $data['status'] ?? 'draft',
-            ]);
+            ];
+            if ($this->columnExists('assignments', 'external_url')) {
+                $columns .= ', external_url';
+                $placeholders .= ',?';
+                $values[] = $data['external_url'] ?? null;
+            }
+            $columns .= ', status';
+            $placeholders .= ',?';
+            $values[] = $data['status'] ?? 'draft';
+
+            $stmt = $this->db->prepare("INSERT INTO assignments ({$columns}) VALUES ({$placeholders})");
+            $stmt->execute($values);
         } else {
             $stmt = $this->db->prepare(
                 'INSERT INTO assignments (course_id, teacher_id, title, description, instructions, due_date, max_marks, attachment_path, status)

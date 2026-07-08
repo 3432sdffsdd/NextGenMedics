@@ -39,6 +39,39 @@ class HtmlMcqParserService
 
     public function fetchUrl(string $url): string
     {
+        $url = $this->normalizeUrl($url);
+
+        $body = $this->fetchWithCurl($url);
+        if ($body !== null) {
+            return $body;
+        }
+
+        $ctx = stream_context_create([
+            'http' => [
+                'timeout'         => 20,
+                'follow_location' => 1,
+                'max_redirects'   => 3,
+                'user_agent'      => 'NextGenMedics-LMS/1.0',
+            ],
+            'ssl' => ['verify_peer' => true, 'verify_peer_name' => true],
+        ]);
+
+        $body = @file_get_contents($url, false, $ctx);
+        if ($body === false || trim($body) === '') {
+            throw new \RuntimeException('Could not fetch HTML from the provided link. Check the URL is public and reachable from the server.');
+        }
+        return $body;
+    }
+
+    private function normalizeUrl(string $url): string
+    {
+        $url = trim($url);
+        if ($url === '') {
+            throw new \InvalidArgumentException('URL is required');
+        }
+        if (!preg_match('#^https?://#i', $url)) {
+            $url = 'https://' . ltrim($url, '/');
+        }
         if (!filter_var($url, FILTER_VALIDATE_URL)) {
             throw new \InvalidArgumentException('Invalid URL');
         }
@@ -46,22 +79,40 @@ class HtmlMcqParserService
         if (!in_array(strtolower((string) $scheme), ['http', 'https'], true)) {
             throw new \InvalidArgumentException('Only http/https links are allowed');
         }
+        return $url;
+    }
 
-        $ctx = stream_context_create([
-            'http' => [
-                'timeout'       => 20,
-                'follow_location' => 1,
-                'max_redirects' => 3,
-                'user_agent'    => 'NextGenMedics-LMS/1.0',
-            ],
-            'ssl' => ['verify_peer' => true, 'verify_peer_name' => true],
-        ]);
-
-        $body = @file_get_contents($url, false, $ctx);
-        if ($body === false || trim($body) === '') {
-            throw new \RuntimeException('Could not fetch HTML from the provided link');
+    private function fetchWithCurl(string $url): ?string
+    {
+        if (!function_exists('curl_init')) {
+            return null;
         }
-        return $body;
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS      => 3,
+            CURLOPT_TIMEOUT        => 20,
+            CURLOPT_USERAGENT      => 'NextGenMedics-LMS/1.0',
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+        ]);
+        $body = curl_exec($ch);
+        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($body === false || trim((string) $body) === '') {
+            if ($error !== '') {
+                throw new \RuntimeException('Could not fetch link: ' . $error);
+            }
+            return null;
+        }
+        if ($code >= 400) {
+            throw new \RuntimeException("Could not fetch link (HTTP {$code})");
+        }
+        return (string) $body;
     }
 
     private function htmlToText(string $html): string

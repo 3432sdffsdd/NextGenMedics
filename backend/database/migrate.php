@@ -95,8 +95,22 @@ try {
                    AND TABLE_NAME = 'daily_challenge_sets'"
             )->fetchColumn();
             if ($exists) {
-                $pdo->prepare('INSERT INTO schema_migrations (migration) VALUES (?)')->execute([$name]);
+                $pdo->prepare('INSERT IGNORE INTO schema_migrations (migration) VALUES (?)')->execute([$name]);
                 echo "[skip] {$name} (tables already exist)\n";
+                continue;
+            }
+        }
+
+        if ($name === '008_interactive_assignments.sql') {
+            $exists = (int) $pdo->query(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE()
+                   AND TABLE_NAME = 'assignments'
+                   AND COLUMN_NAME = 'assignment_type'"
+            )->fetchColumn();
+            if ($exists) {
+                $pdo->prepare('INSERT IGNORE INTO schema_migrations (migration) VALUES (?)')->execute([$name]);
+                echo "[skip] {$name} (columns already exist)\n";
                 continue;
             }
         }
@@ -108,7 +122,7 @@ try {
                    AND TABLE_NAME = 'assignment_attachments'"
             )->fetchColumn();
             if ($exists) {
-                $pdo->prepare('INSERT INTO schema_migrations (migration) VALUES (?)')->execute([$name]);
+                $pdo->prepare('INSERT IGNORE INTO schema_migrations (migration) VALUES (?)')->execute([$name]);
                 echo "[skip] {$name} (tables already exist)\n";
                 continue;
             }
@@ -126,7 +140,7 @@ try {
 
         echo "[run]  {$name} ... ";
         $pdo->exec($sql);
-        $pdo->prepare('INSERT INTO schema_migrations (migration) VALUES (?)')->execute([$name]);
+        $pdo->prepare('INSERT IGNORE INTO schema_migrations (migration) VALUES (?)')->execute([$name]);
         echo "OK\n";
         $ran++;
     }

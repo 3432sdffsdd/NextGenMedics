@@ -93,7 +93,9 @@ export default function TeacherCourseHub() {
         {tab === 'content' && <ContentManager courseId={courseId} structure={structure} reload={loadStructure} />}
         {tab === 'study tools' && <AiTutorPanel lectures={allLectures} />}
         {tab === 'quizzes' && <QuizManager courseId={courseId} />}
-        {tab === 'assignments' && <AssignmentManager courseId={courseId} />}
+        <div className={tab === 'assignments' ? '' : 'hidden'}>
+          <AssignmentManager courseId={courseId} />
+        </div>
         {tab === 'attendance' && <AttendanceManager courseId={courseId} students={students} />}
         {tab === 'live class' && <LiveClassManager courseId={courseId} canManage />}
         {tab === 'announcements' && <AnnouncementsManager courseId={courseId} />}

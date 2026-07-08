@@ -29,5 +29,3 @@ ALTER TABLE assignment_submissions
     ADD COLUMN answers_json JSON NULL AFTER submission_text,
     ADD COLUMN percentage DECIMAL(5,2) NULL AFTER marks,
     ADD COLUMN passed TINYINT(1) NULL AFTER percentage;
-
-INSERT IGNORE INTO schema_migrations (migration) VALUES ('008_interactive_assignments.sql');

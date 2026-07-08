@@ -101,10 +101,11 @@ class AssignmentController extends BaseController
         if (!$this->assignments->hasAssignmentTypeColumn()) {
             $type = 'file';
         }
-        $externalUrl = trim((string) ($body['external_url'] ?? ''));
+        $externalUrl = $this->normalizeExternalUrl(trim((string) ($body['external_url'] ?? '')));
 
         $attachmentPath = null;
         $id = null;
+        $fileWarning = null;
 
         try {
             $file = $request->file('attachment');
@@ -118,6 +119,11 @@ class AssignmentController extends BaseController
                 return;
             }
 
+            $status = (string) ($body['status'] ?? 'published');
+            if (!in_array($status, ['draft', 'published', 'closed'], true)) {
+                $status = 'published';
+            }
+
             $id = $this->assignments->create(array_merge($data, [
                 'teacher_id'      => $request->userId(),
                 'description'     => $body['description'] ?? null,
@@ -126,7 +132,7 @@ class AssignmentController extends BaseController
                 'attachment_path' => $attachmentPath,
                 'assignment_type' => $type,
                 'external_url'    => $externalUrl !== '' ? $externalUrl : null,
-                'status'          => $body['status'] ?? 'published',
+                'status'          => $status,
             ]));
 
             if ($type === 'interactive_test') {
@@ -135,7 +141,7 @@ class AssignmentController extends BaseController
                     throw new \RuntimeException('No valid MCQs found in the HTML. Use Question + A–D options + ANSWER: B format.');
                 }
             } else {
-                $this->storeAssignmentFiles($id, $courseId, $request, $attachmentPath);
+                $fileWarning = $this->saveAssignmentUploads($id, $courseId, $request, $attachmentPath);
             }
         } catch (\Throwable $e) {
             if ($id) {
@@ -150,9 +156,21 @@ class AssignmentController extends BaseController
         }
 
         $assignment = $this->assignments->findById($id);
+        if (!$assignment) {
+            Response::error('Assignment was created but could not be loaded. Refresh the page.', 500);
+            return;
+        }
         $assignment['attachments'] = $this->attachmentsForAssignment($assignment);
-        $this->notifyNewAssignment($assignment, $courseId, $id);
-        Response::success($assignment, 'Assignment created', 201);
+        try {
+            $this->notifyNewAssignment($assignment, $courseId, $id);
+        } catch (\Throwable) {
+            // Assignment was saved; notification failure should not block the teacher.
+        }
+        $message = 'Assignment created';
+        if (!empty($fileWarning)) {
+            $message .= '. ' . $fileWarning;
+        }
+        Response::success($assignment, $message, 201);
     }
 
     public function show(Request $request): void
@@ -190,6 +208,9 @@ class AssignmentController extends BaseController
         $body = $request->body();
         $allowed = ['title', 'description', 'instructions', 'due_date', 'max_marks', 'status', 'external_url'];
         $fields = array_intersect_key($body, array_flip($allowed));
+        if (isset($fields['external_url'])) {
+            $fields['external_url'] = $this->normalizeExternalUrl((string) $fields['external_url']) ?: null;
+        }
         if (isset($fields['due_date'])) {
             $fields['due_date'] = $this->normalizeDueDate((string) $fields['due_date']);
         }
@@ -213,7 +234,7 @@ class AssignmentController extends BaseController
             }
 
             if (($assignment['assignment_type'] ?? 'file') !== 'interactive_test') {
-                $this->storeAssignmentFiles((int) $assignment['id'], (int) $assignment['course_id'], $request, null, true);
+                $this->saveAssignmentUploads((int) $assignment['id'], (int) $assignment['course_id'], $request, null, true);
             }
         } catch (\Throwable $e) {
             Response::error($e->getMessage() ?: 'Could not update assignment', 422);
@@ -582,7 +603,7 @@ class AssignmentController extends BaseController
 
     private function resolveHtmlInput(Request $request): string
     {
-        $url = trim((string) $request->input('external_url', ''));
+        $url = $this->normalizeExternalUrl(trim((string) $request->input('external_url', '')));
         if ($url !== '') {
             return $this->htmlParser->fetchUrl($url);
         }
@@ -704,11 +725,7 @@ class AssignmentController extends BaseController
         if (!$files && $single) {
             $files = [$single];
         }
-        $body = $request->body();
-        $titles = $body['file_titles'] ?? $body['file_titles'] ?? [];
-        if (!is_array($titles)) {
-            $titles = $titles !== null && $titles !== '' ? [$titles] : [];
-        }
+        $titles = $request->arrayInput('file_titles');
         $out = [];
         foreach ($files as $i => $file) {
             if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
@@ -727,15 +744,40 @@ class AssignmentController extends BaseController
         return $out;
     }
 
+    private function saveAssignmentUploads(int $assignmentId, int $courseId, Request $request, ?string $legacyPath, bool $append = false): ?string
+    {
+        try {
+            $incoming = $this->assignmentFilesFromRequest($request);
+            $expected = max(count($incoming), (int) ($request->input('expected_files', 0)));
+
+            if (!$this->assignments->supportsAttachments() && count($incoming) > 1) {
+                $this->storeAssignmentFiles($assignmentId, $courseId, $request, $legacyPath, $append);
+                return 'Only the first file was saved. Run backend/run-migrations.bat for multiple files per assignment.';
+            }
+
+            $this->storeAssignmentFiles($assignmentId, $courseId, $request, $legacyPath, $append);
+
+            if ($expected > 0) {
+                $assignment = $this->assignments->findById($assignmentId);
+                $stored = $assignment ? $this->attachmentsForAssignment($assignment) : [];
+                if (count($stored) === 0 && empty($assignment['attachment_path'])) {
+                    return 'Assignment saved, but attachments were not received. Try uploading files again from Edit.';
+                }
+            }
+        } catch (\Throwable $e) {
+            return 'Assignment saved, but attachments failed: ' . $e->getMessage();
+        }
+
+        return null;
+    }
+
     private function storeAssignmentFiles(int $assignmentId, int $courseId, Request $request, ?string $legacyPath, bool $append = false): void
     {
         $files = $this->assignmentFilesFromRequest($request);
         $supportsMulti = $this->assignments->supportsAttachments();
 
         if (!$supportsMulti && count($files) > 1) {
-            throw new \RuntimeException(
-                'Multiple files require database migration 009. Run backend/database/live-update-all.sql, or upload one file at a time.'
-            );
+            $files = array_slice($files, 0, 1);
         }
 
         if (!$append && $legacyPath && !$files) {
@@ -750,11 +792,7 @@ class AssignmentController extends BaseController
             return;
         }
 
-        $body = $request->body();
-        $titles = $body['file_titles'] ?? [];
-        if (!is_array($titles)) {
-            $titles = $titles !== null && $titles !== '' ? [$titles] : [];
-        }
+        $titles = $request->arrayInput('file_titles');
         $order = $supportsMulti ? count($this->assignments->listAttachments($assignmentId)) : 0;
         foreach ($files as $i => $file) {
             if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
@@ -787,13 +825,47 @@ class AssignmentController extends BaseController
     private function assignmentFilesFromRequest(Request $request): array
     {
         $files = $request->files('files');
-        if (!$files) {
-            $single = $request->file('files');
-            if ($single) {
-                $files = [$single];
+        if ($files) {
+            return $files;
+        }
+
+        foreach (array_keys($_FILES) as $key) {
+            if ($key === 'files' || $key === 'files[]') {
+                $files = $request->files('files');
+                if ($files) {
+                    return $files;
+                }
             }
         }
-        return $files;
+
+        // Some browsers send files[0], files[1], …
+        $indexed = [];
+        foreach ($_FILES as $key => $entry) {
+            if (preg_match('/^files\[(\d+)\]$/', $key, $m)) {
+                if (!is_array($entry['name'] ?? null) && ($entry['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                    $indexed[(int) $m[1]] = $entry;
+                }
+            }
+        }
+        if ($indexed) {
+            ksort($indexed);
+            return array_values($indexed);
+        }
+
+        $single = $request->file('files');
+        return $single ? [$single] : [];
+    }
+
+    private function normalizeExternalUrl(string $url): string
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+        if (!preg_match('#^https?://#i', $url)) {
+            $url = 'https://' . ltrim($url, '/');
+        }
+        return filter_var($url, FILTER_VALIDATE_URL) ? $url : '';
     }
 
     private function normalizeDueDate(string $value): string
