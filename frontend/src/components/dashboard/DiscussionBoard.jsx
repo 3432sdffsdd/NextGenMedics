@@ -44,11 +44,10 @@ function RoleBadge({ role }) {
 }
 
 /**
- * Unified modern discussion board. Works at course level (lectureId omitted)
- * or lecture level. Supports nested replies, likes, edit/delete own, staff
- * pin/approve, and reporting.
+ * Unified modern discussion board. Works at course level (lectureId/assignmentId omitted),
+ * lecture level, or assignment level.
  */
-export default function DiscussionBoard({ courseId, lectureId = null, canModerate = false }) {
+export default function DiscussionBoard({ courseId, lectureId = null, assignmentId = null, canModerate = false }) {
   const { user } = useAuth()
   const toast = useToast()
   const confirm = useConfirm()
@@ -66,9 +65,12 @@ export default function DiscussionBoard({ courseId, lectureId = null, canModerat
       return
     }
     setLoading(true)
-    const req = lectureId ? discussionService.byLecture(lectureId) : discussionService.list(courseId, { per_page: 50 })
+    let req
+    if (assignmentId) req = discussionService.byAssignment(assignmentId)
+    else if (lectureId) req = discussionService.byLecture(lectureId)
+    else req = discussionService.list(courseId, { per_page: 50 })
     req.then(({ data }) => setThreads(data.data || [])).catch(() => {}).finally(() => setLoading(false))
-  }, [courseId, lectureId])
+  }, [courseId, lectureId, assignmentId])
 
   useEffect(() => { loadThreads() }, [loadThreads])
 
@@ -92,6 +94,7 @@ export default function DiscussionBoard({ courseId, lectureId = null, canModerat
         content: content.trim(),
       }
       if (lectureId) payload.lecture_id = Number(lectureId)
+      if (assignmentId) payload.assignment_id = Number(assignmentId)
       await discussionService.create(payload)
       setTitle(''); setContent('')
       toast.success('Question posted')

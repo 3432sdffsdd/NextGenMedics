@@ -296,14 +296,41 @@ export default function AdminCourseForm() {
           {enrolled.length > 0 && (
             <div className="mt-6">
               <h4 className="text-sm font-semibold text-navy">Enrolled students ({enrolled.length})</h4>
+              <p className="mt-1 text-xs text-slate-500">
+                Turn on <strong>Allow video download</strong> only for students who may save lecture videos. Everyone else can still watch online.
+              </p>
               <ul className="mt-2 divide-y divide-slate-100 rounded-xl border border-slate-100">
                 {enrolled.map((s) => (
-                  <li key={s.id} className="flex items-center justify-between px-4 py-2 text-sm">
+                  <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
                     <span>{s.first_name} {s.last_name} — {s.email}</span>
-                    <button type="button" onClick={async () => {
-                      await adminCoursesService.unenroll(Number(id), s.id)
-                      setEnrolled((prev) => prev.filter((x) => x.id !== s.id))
-                    }} className="text-red-500 hover:underline">Remove</button>
+                    <div className="flex items-center gap-3">
+                      <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={!!Number(s.can_download_videos)}
+                          onChange={async (e) => {
+                            const allowed = e.target.checked
+                            try {
+                              await adminCoursesService.setDownloadVideos(Number(id), s.id, allowed)
+                              setEnrolled((prev) => prev.map((x) => (
+                                x.id === s.id ? { ...x, can_download_videos: allowed ? 1 : 0 } : x
+                              )))
+                              setMessage(allowed
+                                ? `Video download enabled for ${s.first_name}`
+                                : `Video download disabled for ${s.first_name}`)
+                            } catch {
+                              setMessage('Could not update download permission')
+                            }
+                          }}
+                          className="rounded border-slate-300 text-primary focus:ring-primary"
+                        />
+                        Allow video download
+                      </label>
+                      <button type="button" onClick={async () => {
+                        await adminCoursesService.unenroll(Number(id), s.id)
+                        setEnrolled((prev) => prev.filter((x) => x.id !== s.id))
+                      }} className="text-red-500 hover:underline">Remove</button>
+                    </div>
                   </li>
                 ))}
               </ul>

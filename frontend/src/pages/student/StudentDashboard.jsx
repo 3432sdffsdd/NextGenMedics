@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FiZap, FiTarget, FiBookOpen, FiAlertCircle, FiCalendar, FiRefreshCw, FiBell, FiBookmark, FiChevronDown, FiArchive } from 'react-icons/fi'
-import { premiumStudyService, dashboardService, myCoursesService, progressService, announcementsService } from '../../services/api'
+import { FiZap, FiTarget, FiBookOpen, FiAlertCircle, FiCalendar, FiRefreshCw, FiBell, FiBookmark, FiChevronDown, FiArchive, FiExternalLink } from 'react-icons/fi'
+import { premiumStudyService, dashboardService, myCoursesService, progressService, announcementsService, notificationsService } from '../../services/api'
 import StatCard from '../../components/dashboard/StatCard'
 import StreakWidget from '../../components/dashboard/StreakWidget'
 import ProgressBar from '../../components/dashboard/ProgressBar'
@@ -9,8 +9,10 @@ import McqPlayer from '../../components/dashboard/McqPlayer'
 import { useAuth } from '../../context/AuthContext'
 import { formatDateTime } from '../../utils/files'
 import { Badge } from '../../components/ui'
+import { notificationActionLabel, notificationHref, dedupeNotifications } from '../../utils/notificationLinks'
 
 const RECENT_ANNOUNCEMENT_LIMIT = 5
+const ACTIVITY_TYPES = new Set(['new_content', 'ai_content_published', 'new_quiz', 'new_assignment', 'assignment_graded'])
 
 function AnnouncementCard({ a }) {
   return (
@@ -44,6 +46,32 @@ function AnnouncementCard({ a }) {
   )
 }
 
+function ActivityCard({ n, onOpened }) {
+  const href = notificationHref(n, 'student')
+  return (
+    <article className={`rounded-lg border px-3 py-2 ${n.is_read ? 'border-slate-100 bg-white' : 'border-emerald-200 bg-emerald-50/60'}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <h3 className="truncate text-sm font-semibold text-navy">{n.title}</h3>
+            {!n.is_read && <Badge tone="success">New</Badge>}
+          </div>
+          <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">{n.message}</p>
+        </div>
+        {href && (
+          <Link
+            to={href}
+            onClick={() => onOpened?.(n)}
+            className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-white hover:opacity-95"
+          >
+            <FiExternalLink size={12} /> {notificationActionLabel(n)}
+          </Link>
+        )}
+      </div>
+    </article>
+  )
+}
+
 function Countdown({ seconds }) {
   const [left, setLeft] = useState(seconds)
   useEffect(() => {
@@ -66,6 +94,7 @@ export default function StudentDashboard() {
   const [revisionSummary, setRevisionSummary] = useState(null)
   const [startingRevision, setStartingRevision] = useState(false)
   const [announcements, setAnnouncements] = useState([])
+  const [activity, setActivity] = useState([])
   const [showArchived, setShowArchived] = useState(false)
   const revisionStart = useRef(Date.now())
 
@@ -80,10 +109,25 @@ export default function StudentDashboard() {
         setAnnouncements(rows)
       })
       .catch(() => {})
+    notificationsService.list({ per_page: 40 })
+      .then(({ data }) => {
+        const rows = Array.isArray(data.data) ? data.data : (data.data?.items || [])
+        const filtered = rows.filter((n) => ACTIVITY_TYPES.has(n.type))
+        setActivity(dedupeNotifications(filtered, 5))
+      })
+      .catch(() => {})
   }, [])
 
   const recentAnnouncements = announcements.slice(0, RECENT_ANNOUNCEMENT_LIMIT)
   const archivedAnnouncements = announcements.slice(RECENT_ANNOUNCEMENT_LIMIT)
+
+  const markActivityOpened = async (n) => {
+    if (!n?.id || n.is_read) return
+    try {
+      await notificationsService.markRead(n.id)
+      setActivity((prev) => prev.map((x) => (x.id === n.id ? { ...x, is_read: 1 } : x)))
+    } catch { /* ignore */ }
+  }
 
   const startRevision = async () => {
     setStartingRevision(true)
@@ -162,39 +206,60 @@ export default function StudentDashboard() {
     <div>
       <p className="text-slate-500">Welcome, {user?.full_name}. Your personalized FCPS study hub.</p>
 
-      {announcements.length > 0 && (
+      {(activity.length > 0 || announcements.length > 0) && (
         <section className="mt-6 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 via-white to-white p-5 shadow-soft">
-          <div className="flex items-center gap-2">
-            <FiBell className="text-primary" size={20} />
-            <h2 className="font-display text-lg font-bold text-navy">Announcements</h2>
-          </div>
-          <div className="mt-4 space-y-3">
-            {recentAnnouncements.map((a) => (
-              <AnnouncementCard key={a.id} a={a} />
-            ))}
-          </div>
+          {activity.length > 0 && (
+            <div className={announcements.length > 0 ? 'mb-6' : ''}>
+              <div className="flex items-center gap-2">
+                <FiBell className="text-emerald-600" size={20} />
+                <h2 className="font-display text-lg font-bold text-navy">New course updates</h2>
+              </div>
+              <p className="mt-1 text-sm text-slate-500">
+                Materials, quizzes, and assignments from your teachers — open them directly.
+              </p>
+              <div className="mt-3 space-y-2">
+                {activity.map((n) => (
+                  <ActivityCard key={n.id} n={n} onOpened={markActivityOpened} />
+                ))}
+              </div>
+            </div>
+          )}
 
-          {archivedAnnouncements.length > 0 && (
-            <div className="mt-4 border-t border-slate-100 pt-4">
-              <button
-                type="button"
-                onClick={() => setShowArchived((v) => !v)}
-                className="flex w-full items-center justify-between rounded-xl border border-slate-100 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
-              >
-                <span className="inline-flex items-center gap-2">
-                  <FiArchive size={16} className="text-slate-400" />
-                  Archived ({archivedAnnouncements.length})
-                </span>
-                <FiChevronDown size={18} className={`text-slate-400 transition-transform ${showArchived ? 'rotate-180' : ''}`} />
-              </button>
-              {showArchived && (
-                <div className="mt-3 space-y-3">
-                  {archivedAnnouncements.map((a) => (
-                    <AnnouncementCard key={a.id} a={a} />
-                  ))}
+          {announcements.length > 0 && (
+            <>
+              <div className="flex items-center gap-2">
+                <FiBell className="text-primary" size={20} />
+                <h2 className="font-display text-lg font-bold text-navy">Announcements</h2>
+              </div>
+              <div className="mt-4 space-y-3">
+                {recentAnnouncements.map((a) => (
+                  <AnnouncementCard key={a.id} a={a} />
+                ))}
+              </div>
+
+              {archivedAnnouncements.length > 0 && (
+                <div className="mt-4 border-t border-slate-100 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowArchived((v) => !v)}
+                    className="flex w-full items-center justify-between rounded-xl border border-slate-100 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <FiArchive size={16} className="text-slate-400" />
+                      Archived ({archivedAnnouncements.length})
+                    </span>
+                    <FiChevronDown size={18} className={`text-slate-400 transition-transform ${showArchived ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showArchived && (
+                    <div className="mt-3 space-y-3">
+                      {archivedAnnouncements.map((a) => (
+                        <AnnouncementCard key={a.id} a={a} />
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
+            </>
           )}
         </section>
       )}

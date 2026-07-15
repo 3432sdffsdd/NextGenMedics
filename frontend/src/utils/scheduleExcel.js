@@ -81,11 +81,11 @@ export const parseMonthScheduleRows = (rows, monthYear) => {
         class_date,
         start_time,
         end_time,
-        subject: String(pick(row, 'subject') || ''),
-        topic_covered: String(pick(row, 'topic', 'topiccovered') || ''),
-        lecture_title: String(pick(row, 'title', 'lecture', 'lecturetitle', 'class') || ''),
-        teacher: String(pick(row, 'teacher', 'instructor', 'faculty') || ''),
-        meeting_link: String(pick(row, 'meeting', 'url', 'link', 'zoom') || ''),
+        subject: String(pick(row, 'subject') || '').trim(),
+        topic_covered: String(pick(row, 'topic', 'topiccovered') || '').trim(),
+        lecture_title: String(pick(row, 'title', 'lecture', 'lecturetitle', 'class') || '').trim(),
+        teacher: String(pick(row, 'teacher', 'instructor', 'faculty') || '').trim(),
+        meeting_link: String(pick(row, 'meeting', 'url', 'link', 'zoom') || '').trim().replace(/\s+/g, ''),
       }
     })
     .filter((r) => r.class_date && r.start_time && r.end_time && r.lecture_title)

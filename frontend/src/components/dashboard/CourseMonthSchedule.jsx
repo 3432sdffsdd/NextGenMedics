@@ -15,7 +15,7 @@ import {
   parseMonthScheduleRows,
   readScheduleWorkbook,
 } from '../../utils/scheduleExcel'
-import { fmtDate, fmtTime, STATUS_CONFIG } from '../../utils/scheduleStatus'
+import { fmtDate, fmtTime, resolveScheduleStatus, STATUS_CONFIG } from '../../utils/scheduleStatus'
 
 const inputCls =
   'rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15'
@@ -327,7 +327,7 @@ export default function CourseMonthSchedule({ courseId, canEdit = false }) {
                   <td className="px-4 py-3 font-medium text-navy">{s.lecture_title}</td>
                   <td className="px-4 py-3 text-slate-600">{s.subject || '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{s.teacher_name || '—'}</td>
-                  <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
+                  <td className="px-4 py-3"><StatusBadge status={resolveScheduleStatus(s)} /></td>
                 </tr>
               ))}
             </tbody>

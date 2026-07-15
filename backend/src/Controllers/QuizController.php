@@ -106,7 +106,7 @@ class QuizController extends BaseController
             'new_quiz',
             'New quiz available',
             "Quiz \"{$quiz['title']}\" is now available. Check the Quizzes tab in your course.",
-            ['quiz_id' => (int) $quiz['id'], 'course_id' => $courseId],
+            ['quiz_id' => (int) $quiz['id'], 'course_id' => $courseId, 'tab' => 'quizzes'],
             false
         );
     }

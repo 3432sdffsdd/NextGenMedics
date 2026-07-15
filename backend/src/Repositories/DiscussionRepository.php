@@ -5,12 +5,15 @@ class DiscussionRepository extends BaseRepository
 {
     public function listByCourse(int $courseId, int $page, int $perPage): array
     {
+        $assignmentFilter = $this->columnExists('discussion_threads', 'assignment_id')
+            ? ' AND t.assignment_id IS NULL'
+            : '';
         $sql = 'SELECT t.*, CONCAT(u.first_name, " ", u.last_name) AS author_name, ro.slug AS author_role,
                        (SELECT COUNT(*) FROM discussion_replies r WHERE r.thread_id = t.id) AS reply_count
                 FROM discussion_threads t
                 JOIN users u ON u.id = t.author_id
                 JOIN roles ro ON ro.id = u.role_id
-                WHERE t.course_id = ? AND t.status != "hidden"
+                WHERE t.course_id = ? AND t.status != "hidden"' . $assignmentFilter . '
                 ORDER BY t.is_pinned DESC, t.created_at DESC';
         return $this->paginate($sql, [$courseId], $page, $perPage);
     }
@@ -28,6 +31,25 @@ class DiscussionRepository extends BaseRepository
              ORDER BY t.is_pinned DESC, t.created_at DESC'
         );
         $stmt->execute([$lectureId]);
+        return $stmt->fetchAll();
+    }
+
+    /** Threads attached to a specific assignment. */
+    public function listByAssignment(int $assignmentId): array
+    {
+        if (!$this->columnExists('discussion_threads', 'assignment_id')) {
+            return [];
+        }
+        $stmt = $this->db->prepare(
+            'SELECT t.*, CONCAT(u.first_name, " ", u.last_name) AS author_name, ro.slug AS author_role,
+                    (SELECT COUNT(*) FROM discussion_replies r WHERE r.thread_id = t.id) AS reply_count
+             FROM discussion_threads t
+             JOIN users u ON u.id = t.author_id
+             JOIN roles ro ON ro.id = u.role_id
+             WHERE t.assignment_id = ? AND t.status != "hidden"
+             ORDER BY t.is_pinned DESC, t.created_at DESC'
+        );
+        $stmt->execute([$assignmentId]);
         return $stmt->fetchAll();
     }
 
@@ -62,7 +84,23 @@ class DiscussionRepository extends BaseRepository
 
     public function createThread(array $data): int
     {
-        if ($this->columnExists('discussion_threads', 'lecture_id')) {
+        $hasLecture = $this->columnExists('discussion_threads', 'lecture_id');
+        $hasAssignment = $this->columnExists('discussion_threads', 'assignment_id');
+
+        if ($hasLecture && $hasAssignment) {
+            $stmt = $this->db->prepare(
+                'INSERT INTO discussion_threads (course_id, lecture_id, assignment_id, author_id, title, content)
+                 VALUES (?,?,?,?,?,?)'
+            );
+            $stmt->execute([
+                $data['course_id'],
+                $data['lecture_id'] ?? null,
+                $data['assignment_id'] ?? null,
+                $data['author_id'],
+                $data['title'],
+                $data['content'],
+            ]);
+        } elseif ($hasLecture) {
             $stmt = $this->db->prepare(
                 'INSERT INTO discussion_threads (course_id, lecture_id, author_id, title, content) VALUES (?,?,?,?,?)'
             );

@@ -132,6 +132,34 @@ try {
             // Safe to re-run: INSERT uses NOT EXISTS guards.
         }
 
+        if ($name === '011_enrollment_video_download.sql') {
+            $exists = (int) $pdo->query(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE()
+                   AND TABLE_NAME = 'course_enrollments'
+                   AND COLUMN_NAME = 'can_download_videos'"
+            )->fetchColumn();
+            if ($exists) {
+                $pdo->prepare('INSERT IGNORE INTO schema_migrations (migration) VALUES (?)')->execute([$name]);
+                echo "[skip] {$name} (column can_download_videos already exists)\n";
+                continue;
+            }
+        }
+
+        if ($name === '012_assignment_discussions.sql') {
+            $exists = (int) $pdo->query(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE()
+                   AND TABLE_NAME = 'discussion_threads'
+                   AND COLUMN_NAME = 'assignment_id'"
+            )->fetchColumn();
+            if ($exists) {
+                $pdo->prepare('INSERT IGNORE INTO schema_migrations (migration) VALUES (?)')->execute([$name]);
+                echo "[skip] {$name} (column assignment_id already exists)\n";
+                continue;
+            }
+        }
+
         $sql = file_get_contents($path);
         if ($sql === false || trim($sql) === '') {
             echo "[warn] {$name} is empty, skipping\n";

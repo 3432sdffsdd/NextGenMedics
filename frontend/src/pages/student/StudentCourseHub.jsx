@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import ViewFileButton from '../../components/dashboard/ViewFileButton'
 import { myCoursesService, adminCoursesService, quizService, assignmentService, attendanceService, notificationsService, downloadMedia } from '../../services/api'
 import TabBadge from '../../components/dashboard/TabBadge'
@@ -10,20 +10,26 @@ import StudentLearnMaterials from '../../components/dashboard/StudentLearnMateri
 import LiveClassManager from '../teacher/LiveClassManager'
 import QuizReview from '../../components/dashboard/QuizReview'
 import AssignmentTestRunner, { AssignmentTestResult, AssignmentTestReview } from '../../components/dashboard/AssignmentTestRunner'
-import { EmptyState } from '../../components/ui'
+import AssignmentDiscussion from '../../components/dashboard/AssignmentDiscussion'
+import { EmptyState, Modal } from '../../components/ui'
 import Alert from '../../components/dashboard/Alert'
 import MultiFileUploadField from '../../components/dashboard/MultiFileUploadField'
 import { ACCEPT_ALL, appendTitledFiles, normalizeExternalUrl } from '../../utils/files'
-import { FiHelpCircle, FiFileText, FiDownload, FiLink } from 'react-icons/fi'
+import { FiHelpCircle, FiFileText, FiDownload, FiLink, FiMessageSquare } from 'react-icons/fi'
 
 const TABS = ['learn', 'quizzes', 'assignments', 'live class', 'discussions', 'schedule', 'attendance']
-const BADGE_TABS = new Set(['quizzes', 'assignments', 'discussions'])
+const BADGE_TABS = new Set(['learn', 'quizzes', 'assignments', 'discussions'])
 
 export default function StudentCourseHub() {
   const { id } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const courseId = Number(id)
   const toast = useToast()
-  const [tab, setTab] = useState('learn')
+  const initialTab = (() => {
+    const t = searchParams.get('tab')
+    return t && TABS.includes(t) ? t : 'learn'
+  })()
+  const [tab, setTab] = useState(initialTab)
   const [course, setCourse] = useState(null)
   const [structure, setStructure] = useState([])
   const [quizzes, setQuizzes] = useState([])
@@ -46,11 +52,12 @@ export default function StudentCourseHub() {
   const [assignmentTestResult, setAssignmentTestResult] = useState(null)
   const [assignmentTestReview, setAssignmentTestReview] = useState(null)
   const [submittingTest, setSubmittingTest] = useState(false)
-  const [tabBadges, setTabBadges] = useState({ assignments: 0, quizzes: 0, discussions: 0 })
+  const [tabBadges, setTabBadges] = useState({ learn: 0, assignments: 0, quizzes: 0, discussions: 0 })
+  const [discussAssignment, setDiscussAssignment] = useState(null)
 
   const loadTabBadges = useCallback(() => {
     notificationsService.courseTabBadges(courseId)
-      .then(({ data }) => setTabBadges(data.data || { assignments: 0, quizzes: 0, discussions: 0 }))
+      .then(({ data }) => setTabBadges(data.data || { learn: 0, assignments: 0, quizzes: 0, discussions: 0 }))
       .catch(() => {})
   }, [courseId])
 
@@ -60,12 +67,21 @@ export default function StudentCourseHub() {
     return () => clearInterval(t)
   }, [loadTabBadges])
 
+  useEffect(() => {
+    const t = searchParams.get('tab')
+    if (t && TABS.includes(t)) setTab(t)
+  }, [searchParams])
+
   const selectTab = async (t) => {
     setTab(t)
+    const next = new URLSearchParams(searchParams)
+    if (t === 'learn') next.delete('tab')
+    else next.set('tab', t)
+    setSearchParams(next, { replace: true })
     if (BADGE_TABS.has(t) && tabBadges[t] > 0) {
       try {
         const { data } = await notificationsService.markCourseTabRead(courseId, t)
-        setTabBadges(data.data?.badges || { assignments: 0, quizzes: 0, discussions: 0 })
+        setTabBadges(data.data?.badges || { learn: 0, assignments: 0, quizzes: 0, discussions: 0 })
       } catch {
         loadTabBadges()
       }
@@ -266,7 +282,11 @@ export default function StudentCourseHub() {
 
       {tab === 'learn' && (
         <div className="mt-6">
-          <StudentLearnMaterials structure={structure} courseId={courseId} />
+          <StudentLearnMaterials
+            structure={structure}
+            courseId={courseId}
+            canDownloadVideos={!!Number(course?.can_download_videos)}
+          />
         </div>
       )}
 
@@ -376,6 +396,16 @@ export default function StudentCourseHub() {
                           MCQ test · {a.question_count || 0} questions
                         </span>
                       )}
+                      {Number(a.discussion_count) > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                          <span className="relative flex h-1.5 w-1.5">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          </span>
+                          Discussion active
+                          {Number(a.discussion_count) > 1 ? ` · ${a.discussion_count}` : ''}
+                        </span>
+                      )}
                     </div>
                     {a.description && <p className="mt-1 text-sm text-slate-500">{a.description}</p>}
                     {a.instructions && <p className="mt-1 text-sm text-slate-600">{a.instructions}</p>}
@@ -452,24 +482,41 @@ export default function StudentCourseHub() {
                       </div>
                     )}
                   </div>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDiscussAssignment(a)}
+                    className={`btn-secondary text-sm inline-flex items-center gap-1.5 ${
+                      Number(a.discussion_count) > 0 ? 'ring-2 ring-emerald-200 text-emerald-800' : ''
+                    }`}
+                  >
+                    <FiMessageSquare size={14} />
+                    {Number(a.discussion_count) > 0 ? 'Join discussion' : 'Discuss'}
+                    {Number(a.discussion_count) > 0 && (
+                      <span className="rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                        {a.discussion_count}
+                      </span>
+                    )}
+                  </button>
                   {isInteractive ? (
                     a.status !== 'closed' && !sub && (
-                      <button type="button" onClick={() => startAssignmentTest(a.id)} className="btn-primary shrink-0 text-sm">
+                      <button type="button" onClick={() => startAssignmentTest(a.id)} className="btn-primary text-sm">
                         Start test
                       </button>
                     )
                   ) : (
                     a.status !== 'closed' && (
-                      <button type="button" onClick={() => { setSubmitAssignmentId(a.id); setSubmitFiles([]); setSubmitText('') }} className="btn-primary shrink-0 text-sm">
+                      <button type="button" onClick={() => { setSubmitAssignmentId(a.id); setSubmitFiles([]); setSubmitText('') }} className="btn-primary text-sm">
                         {sub ? 'Resubmit' : 'Submit'}
                       </button>
                     )
                   )}
                   {isInteractive && sub && (
-                    <button type="button" onClick={() => startAssignmentTest(a.id)} className="btn-secondary shrink-0 text-sm">
+                    <button type="button" onClick={() => startAssignmentTest(a.id)} className="btn-secondary text-sm">
                       View result
                     </button>
                   )}
+                  </div>
                 </div>
                 {!isInteractive && submitAssignmentId === a.id && (
                   <form onSubmit={handleAssignmentSubmit} className="mt-4 border-t border-slate-100 pt-4">
@@ -492,6 +539,20 @@ export default function StudentCourseHub() {
           {assignments.length === 0 && (
             <EmptyState icon={FiFileText} title="No assignments yet" description="Assignments will appear here when your teacher posts them." />
           )}
+
+          <Modal
+            open={!!discussAssignment}
+            onClose={() => {
+              setDiscussAssignment(null)
+              reloadAssignments()
+            }}
+            title={`Discussion · ${discussAssignment?.title || ''}`}
+            size="xl"
+          >
+            {discussAssignment && (
+              <AssignmentDiscussion courseId={courseId} assignmentId={discussAssignment.id} />
+            )}
+          </Modal>
         </div>
       )}
 

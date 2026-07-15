@@ -298,29 +298,67 @@ class ScheduleRepository extends BaseRepository
             return null;
         }
 
-        $stmt = $this->db->prepare(
-            'SELECT u.id FROM users u
-             JOIN roles r ON r.id = u.role_id
-             WHERE r.slug IN ("teacher", "admin")
-               AND LOWER(CONCAT(u.first_name, " ", u.last_name)) = LOWER(?)
-             LIMIT 1'
-        );
-        $stmt->execute([$name]);
-        $id = $stmt->fetchColumn();
-        if ($id) {
-            return (int) $id;
+        $needle = $this->normalizeTeacherName($name);
+        if ($needle === '') {
+            return null;
         }
 
         $stmt = $this->db->prepare(
-            'SELECT u.id FROM users u
+            'SELECT u.id, u.first_name, u.last_name FROM users u
              JOIN roles r ON r.id = u.role_id
              WHERE r.slug IN ("teacher", "admin")
-               AND CONCAT(u.first_name, " ", u.last_name) LIKE ?
-             LIMIT 1'
+               AND u.deleted_at IS NULL'
         );
-        $stmt->execute(['%' . $name . '%']);
-        $id = $stmt->fetchColumn();
-        return $id ? (int) $id : null;
+        $stmt->execute();
+        $teachers = $stmt->fetchAll();
+
+        $bestId = null;
+        $bestScore = 0;
+
+        foreach ($teachers as $teacher) {
+            $first = $this->normalizeTeacherName((string) $teacher['first_name']);
+            $last = $this->normalizeTeacherName((string) $teacher['last_name']);
+            $full = trim($first . ' ' . $last);
+
+            $score = 0;
+            if ($full === $needle || $first === $needle || $last === $needle) {
+                $score = 100;
+            } elseif ($full !== '' && (str_contains($full, $needle) || str_contains($needle, $full))) {
+                $score = 90;
+            } elseif ($first !== '' && (str_contains($first, $needle) || str_contains($needle, $first))) {
+                $score = 85;
+            } elseif ($last !== '' && (str_contains($last, $needle) || str_contains($needle, $last))) {
+                $score = 80;
+            } else {
+                foreach (preg_split('/\s+/', $needle) as $token) {
+                    if (strlen($token) < 3) {
+                        continue;
+                    }
+                    if ($token === $first || $token === $last) {
+                        $score = max($score, 75);
+                    } elseif ($first !== '' && str_contains($first, $token)) {
+                        $score = max($score, 70);
+                    } elseif ($last !== '' && str_contains($last, $token)) {
+                        $score = max($score, 65);
+                    }
+                }
+            }
+
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestId = (int) $teacher['id'];
+            }
+        }
+
+        return $bestScore >= 65 ? $bestId : null;
+    }
+
+    /** Strip titles (Dr, Prof, …) and collapse whitespace for fuzzy teacher matching. */
+    private function normalizeTeacherName(string $name): string
+    {
+        $name = trim(preg_replace('/\s+/u', ' ', $name));
+        $name = preg_replace('/\b(dr\.?|prof\.?|professor|mr\.?|mrs\.?|ms\.?|miss)\.?\s*/iu', '', $name);
+        return mb_strtolower(trim(preg_replace('/\s+/u', ' ', $name)));
     }
 
     public function beginTransaction(): void

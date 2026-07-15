@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { adminCoursesService, myCoursesService, attendanceService, notificationsService } from '../../services/api'
 import CourseDiscussion from '../../components/dashboard/CourseDiscussion'
 import CourseMonthSchedule from '../../components/dashboard/CourseMonthSchedule'
@@ -15,10 +15,19 @@ import TabBadge from '../../components/dashboard/TabBadge'
 const TABS = ['content', 'study tools', 'quizzes', 'assignments', 'attendance', 'live class', 'announcements', 'discussions', 'schedule']
 const BADGE_TABS = new Set(['quizzes', 'assignments', 'discussions'])
 
+/** Map notification tab names to teacher hub tabs */
+function resolveTeacherTab(raw) {
+  if (!raw) return null
+  if (raw === 'learn') return 'content'
+  return TABS.includes(raw) ? raw : null
+}
+
 export default function TeacherCourseHub() {
   const { id } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const courseId = Number(id)
-  const [tab, setTab] = useState('content')
+  const initialTab = resolveTeacherTab(searchParams.get('tab')) || 'content'
+  const [tab, setTab] = useState(initialTab)
   const [course, setCourse] = useState(null)
   const [structure, setStructure] = useState([])
   const [students, setStudents] = useState([])
@@ -36,8 +45,17 @@ export default function TeacherCourseHub() {
     return () => clearInterval(t)
   }, [loadTabBadges])
 
+  useEffect(() => {
+    const next = resolveTeacherTab(searchParams.get('tab'))
+    if (next) setTab(next)
+  }, [searchParams])
+
   const selectTab = async (t) => {
     setTab(t)
+    const next = new URLSearchParams(searchParams)
+    if (t === 'content') next.delete('tab')
+    else next.set('tab', t)
+    setSearchParams(next, { replace: true })
     if (BADGE_TABS.has(t) && tabBadges[t] > 0) {
       try {
         const { data } = await notificationsService.markCourseTabRead(courseId, t)

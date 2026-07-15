@@ -5,7 +5,7 @@ const MaterialViewer = lazy(() => import('./MaterialViewer'))
 import LectureDiscussion from './LectureDiscussion'
 import { Modal, EmptyState } from '../ui'
 
-export default function StudentLearnMaterials({ structure, courseId }) {
+export default function StudentLearnMaterials({ structure, courseId, canDownloadVideos = false }) {
   const [viewing, setViewing] = useState(null)
   const [discussLecture, setDiscussLecture] = useState(null)
 
@@ -36,7 +36,7 @@ export default function StudentLearnMaterials({ structure, courseId }) {
                         <MaterialCard
                           key={r.id}
                           resource={r}
-                          allowVideoDownload={false}
+                          allowVideoDownload={canDownloadVideos}
                           onView={(res) => {
                             if (res.external_url && !res.file_path) {
                               window.open(res.external_url, '_blank', 'noreferrer')
@@ -72,7 +72,7 @@ export default function StudentLearnMaterials({ structure, courseId }) {
       <Modal open={!!viewing} onClose={() => setViewing(null)} title={viewing?.title} size="xl">
         {viewing && (
           <Suspense fallback={<p className="py-12 text-center text-sm text-slate-400">Loading preview…</p>}>
-            <MaterialViewer resource={viewing} allowVideoDownload={false} />
+            <MaterialViewer resource={viewing} allowVideoDownload={canDownloadVideos} />
           </Suspense>
         )}
       </Modal>

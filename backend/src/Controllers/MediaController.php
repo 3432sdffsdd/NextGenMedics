@@ -22,7 +22,7 @@ class MediaController extends BaseController
     /** JSON preview for Word / PowerPoint (in-app viewer). */
     public function previewDocument(Request $request): void
     {
-        $relativePath = $this->resolveAuthorizedRelativePath($request);
+        [$relativePath] = $this->resolveAuthorizedRelativePath($request);
         if (!$relativePath) {
             return;
         }
@@ -42,7 +42,7 @@ class MediaController extends BaseController
 
     public function serve(Request $request): void
     {
-        $relativePath = $this->resolveAuthorizedRelativePath($request);
+        [$relativePath, $user] = $this->resolveAuthorizedRelativePath($request);
         if (!$relativePath) {
             return;
         }
@@ -59,6 +59,14 @@ class MediaController extends BaseController
         $filename = basename($fullPath);
         $download = $request->query('download') === '1';
         $isHead = $request->method() === 'HEAD';
+
+        if ($download && $this->isVideoFile($fullPath, $mime) && ($user['role'] ?? '') === 'student') {
+            $courseId = $this->content->getCourseIdFromFilePath($relativePath);
+            if ($courseId && !$this->courseService->canDownloadVideos($courseId, $user)) {
+                Response::error('Video download is not enabled for your account. Ask your admin to allow downloads.', 403);
+                return;
+            }
+        }
 
         while (ob_get_level() > 0) {
             ob_end_clean();
@@ -180,31 +188,33 @@ class MediaController extends BaseController
         return [$start, min($end, $fileSize - 1)];
     }
 
-    /** Auth + path check shared by file streaming and document preview. */
-    private function resolveAuthorizedRelativePath(Request $request): ?string
+    /** Auth + path check shared by file streaming and document preview.
+     *  @return array{0:?string,1:?array} [relativePath, user]
+     */
+    private function resolveAuthorizedRelativePath(Request $request): array
     {
         $token = $request->bearerToken() ?? $request->query('token');
         if (!$token) {
             Response::error('Unauthorized', 401);
-            return null;
+            return [null, null];
         }
 
         $payload = $this->jwt->decode($token);
         if (!$payload || !isset($payload['sub'])) {
             Response::error('Invalid or expired token', 401);
-            return null;
+            return [null, null];
         }
 
         $user = $this->users->findById((int) $payload['sub']);
         if (!$user || $user['status'] !== 'active') {
             Response::error('Unauthorized', 401);
-            return null;
+            return [null, null];
         }
 
         $relativePath = $request->query('path');
         if (!$relativePath || str_contains($relativePath, '..')) {
             Response::error('Invalid path', 422);
-            return null;
+            return [null, null];
         }
 
         $relativePath = str_replace('\\', '/', $relativePath);
@@ -220,25 +230,34 @@ class MediaController extends BaseController
         if ($courseId) {
             if (!$this->courseService->canAccess($courseId, $user)) {
                 Response::error('Forbidden', 403);
-                return null;
+                return [null, null];
             }
         } elseif (preg_match('#uploads/submissions/(\d+)/#', $relativePath, $m)) {
             $ownerId = (int) $m[1];
             if ($user['role'] === 'student' && $ownerId !== (int) $user['id']) {
                 Response::error('Forbidden', 403);
-                return null;
+                return [null, null];
             }
         } elseif (preg_match('#uploads/courses/(\d+)/assignments/#', $relativePath, $m)) {
             if (!$this->courseService->canAccess((int) $m[1], $user)) {
                 Response::error('Forbidden', 403);
-                return null;
+                return [null, null];
             }
         } else {
             Response::error('Forbidden', 403);
-            return null;
+            return [null, null];
         }
 
-        return $relativePath;
+        return [$relativePath, $user];
+    }
+
+    private function isVideoFile(string $fullPath, string $mime): bool
+    {
+        if (str_starts_with($mime, 'video/')) {
+            return true;
+        }
+        $ext = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
+        return in_array($ext, ['mp4', 'webm', 'mov', 'm4v', 'mkv', 'avi'], true);
     }
 
     private function detectMime(string $fullPath): string

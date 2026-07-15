@@ -77,4 +77,14 @@ class CourseService
             default   => false,
         };
     }
+
+    /** Students may stream videos freely; download requires enrollment flag. */
+    public function canDownloadVideos(int $courseId, array $user): bool
+    {
+        return match ($user['role'] ?? '') {
+            'admin', 'teacher' => $this->canAccess($courseId, $user),
+            'student' => $this->courses->studentCanDownloadVideos($courseId, (int) $user['id']),
+            default => false,
+        };
+    }
 }

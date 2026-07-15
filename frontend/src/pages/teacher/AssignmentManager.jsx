@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { FiPlus, FiEdit2, FiTrash2, FiLock, FiUnlock, FiUsers, FiFileText, FiDownload, FiEye, FiLink } from 'react-icons/fi'
+import { FiPlus, FiEdit2, FiTrash2, FiLock, FiUnlock, FiUsers, FiFileText, FiDownload, FiEye, FiLink, FiMessageSquare } from 'react-icons/fi'
 import { assignmentService, downloadMedia } from '../../services/api'
 import { useToast } from '../../context/ToastContext'
 import { useConfirm } from '../../context/ConfirmContext'
@@ -7,6 +7,7 @@ import { Modal, Button, Badge, EmptyState } from '../../components/ui'
 import MultiFileUploadField from '../../components/dashboard/MultiFileUploadField'
 import ViewFileButton from '../../components/dashboard/ViewFileButton'
 import AssignmentHtmlImport from '../../components/dashboard/AssignmentHtmlImport'
+import AssignmentDiscussion from '../../components/dashboard/AssignmentDiscussion'
 import { ACCEPT_ALL, formatDateTime, appendTitledFiles, normalizeExternalUrl } from '../../utils/files'
 
 const STATUS_TONE = { draft: 'neutral', published: 'success', closed: 'warning' }
@@ -26,6 +27,7 @@ export default function AssignmentManager({ courseId }) {
   const [progress, setProgress] = useState(0)
   const [preview, setPreview] = useState(null)
   const [submissionsFor, setSubmissionsFor] = useState(null)
+  const [discussFor, setDiscussFor] = useState(null)
 
   const load = useCallback(() => {
     if (!courseId || Number.isNaN(Number(courseId))) {
@@ -194,6 +196,12 @@ export default function AssignmentManager({ courseId }) {
                     {a.assignment_type === 'interactive_test' && (
                       <Badge tone="purple">MCQ test · {a.question_count || 0} Q</Badge>
                     )}
+                    {Number(a.discussion_count) > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        Discussion active · {a.discussion_count}
+                      </span>
+                    )}
                   </div>
                   <p className="mt-1 text-xs text-slate-400">Due {formatDateTime(a.due_date)} · {a.max_marks} marks · {a.submission_count || 0} submissions</p>
                   {a.status === 'draft' && (
@@ -208,6 +216,15 @@ export default function AssignmentManager({ courseId }) {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button size="sm" variant="secondary" icon={FiUsers} onClick={() => setSubmissionsFor(a)}>Submissions</Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    icon={FiMessageSquare}
+                    onClick={() => setDiscussFor(a)}
+                    className={Number(a.discussion_count) > 0 ? 'ring-2 ring-emerald-200 text-emerald-800' : undefined}
+                  >
+                    {Number(a.discussion_count) > 0 ? `Discuss (${a.discussion_count})` : 'Discuss'}
+                  </Button>
                   <Button size="sm" variant="outline" icon={FiEye} onClick={() => setPreview(a)}>Preview</Button>
                   {a.status === 'draft' && (
                     <Button size="sm" variant="success" icon={FiUnlock} onClick={() => publishAssignment(a)}>Publish</Button>
@@ -350,6 +367,17 @@ export default function AssignmentManager({ courseId }) {
       {submissionsFor && (
         <SubmissionsModal assignment={submissionsFor} onClose={() => { setSubmissionsFor(null); load() }} />
       )}
+
+      <Modal
+        open={!!discussFor}
+        onClose={() => { setDiscussFor(null); load() }}
+        title={`Discussion · ${discussFor?.title || ''}`}
+        size="xl"
+      >
+        {discussFor && (
+          <AssignmentDiscussion courseId={courseId} assignmentId={discussFor.id} canModerate />
+        )}
+      </Modal>
     </div>
   )
 }

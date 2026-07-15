@@ -57,6 +57,7 @@ class NotificationRepository extends BaseRepository
             ];
         }
         return [
+            'learn'       => ['new_content', 'ai_content_published', 'material_uploaded'],
             'assignments' => ['new_assignment', 'assignment_graded'],
             'quizzes'     => ['new_quiz'],
             'discussions' => ['new_discussion', 'discussion_reply'],

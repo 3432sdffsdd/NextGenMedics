@@ -121,6 +121,7 @@ class CourseRepository extends BaseRepository
     {
         $stmt = $this->db->prepare(
             "SELECT c.*, ce.progress, ce.status AS enrollment_status, ce.enrolled_at,
+                    COALESCE(ce.can_download_videos, 0) AS can_download_videos,
                     cat.name AS category_name,
                     CONCAT(t.first_name, ' ', t.last_name) AS teacher_name
              FROM course_enrollments ce
@@ -293,6 +294,31 @@ class CourseRepository extends BaseRepository
         return (int) $stmt->fetchColumn() > 0;
     }
 
+    public function studentCanDownloadVideos(int $courseId, int $studentId): bool
+    {
+        if (!$this->columnExists('course_enrollments', 'can_download_videos')) {
+            return false;
+        }
+        $stmt = $this->db->prepare(
+            'SELECT can_download_videos FROM course_enrollments
+             WHERE course_id = ? AND student_id = ? AND status = "active"'
+        );
+        $stmt->execute([$courseId, $studentId]);
+        return (int) $stmt->fetchColumn() === 1;
+    }
+
+    public function setStudentCanDownloadVideos(int $courseId, int $studentId, bool $allowed): bool
+    {
+        if (!$this->columnExists('course_enrollments', 'can_download_videos')) {
+            return false;
+        }
+        $stmt = $this->db->prepare(
+            'UPDATE course_enrollments SET can_download_videos = ?
+             WHERE course_id = ? AND student_id = ?'
+        );
+        return $stmt->execute([$allowed ? 1 : 0, $courseId, $studentId]);
+    }
+
     public function getCategories(): array
     {
         return $this->db->query(
@@ -304,7 +330,8 @@ class CourseRepository extends BaseRepository
     {
         $stmt = $this->db->prepare(
             'SELECT u.id, u.username, u.email, u.first_name, u.last_name, u.status AS user_status,
-                    ce.enrolled_at, ce.status AS enrollment_status, ce.progress
+                    ce.enrolled_at, ce.status AS enrollment_status, ce.progress,
+                    COALESCE(ce.can_download_videos, 0) AS can_download_videos
              FROM course_enrollments ce
              JOIN users u ON u.id = ce.student_id
              WHERE ce.course_id = ? AND u.deleted_at IS NULL

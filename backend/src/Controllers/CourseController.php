@@ -287,6 +287,38 @@ class CourseController extends BaseController
         Response::success(null, 'Student removed from course');
     }
 
+    /** PATCH /courses/{id}/enroll/{studentId}/download-videos */
+    public function setDownloadVideos(Request $request): void
+    {
+        if (!$this->requireRole($request, ['admin', 'teacher'])) {
+            return;
+        }
+
+        $courseId = (int) $request->param('id');
+        $studentId = (int) $request->param('studentId');
+        if (!$this->courseService->canAccess($courseId, $request->user())) {
+            Response::error('Forbidden', 403);
+            return;
+        }
+
+        if (!$this->courses->isStudentEnrolled($courseId, $studentId)) {
+            Response::error('Student is not enrolled in this course', 404);
+            return;
+        }
+
+        $allowed = filter_var($request->input('can_download_videos', false), FILTER_VALIDATE_BOOLEAN);
+        if (!$this->courses->setStudentCanDownloadVideos($courseId, $studentId, $allowed)) {
+            Response::error('Could not update download permission. Run migration 011 first.', 500);
+            return;
+        }
+
+        Response::success([
+            'student_id' => $studentId,
+            'course_id' => $courseId,
+            'can_download_videos' => $allowed,
+        ], $allowed ? 'Video download enabled for student' : 'Video download disabled for student');
+    }
+
     public function categories(Request $request): void
     {
         Response::success($this->courses->getCategories());

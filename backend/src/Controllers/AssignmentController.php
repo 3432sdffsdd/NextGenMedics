@@ -557,7 +557,7 @@ class AssignmentController extends BaseController
             'new_assignment',
             "New {$label} posted",
             "{$label} \"{$assignment['title']}\" has been posted. Due: {$assignment['due_date']}.",
-            ['assignment_id' => $id, 'course_id' => $courseId]
+            ['assignment_id' => $id, 'course_id' => $courseId, 'tab' => 'assignments']
         );
     }
 

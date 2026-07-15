@@ -7,13 +7,15 @@ use App\Helpers\FileUploadHelper;
 use App\Repositories\ContentRepository;
 use App\Repositories\CourseRepository;
 use App\Services\CourseService;
+use App\Services\NotificationService;
 
 class ContentController extends BaseController
 {
     public function __construct(
         private ContentRepository $content,
         private CourseRepository $courses,
-        private CourseService $courseService
+        private CourseService $courseService,
+        private NotificationService $notifier
     ) {}
 
     public function createModule(Request $request): void
@@ -167,7 +169,32 @@ class ContentController extends BaseController
             'uploaded_by'   => $request->userId(),
         ]);
 
+        $this->notifyStudentsNewContent((int) $courseId, $lectureId, (int) $resourceId, $title);
+
         Response::success(['id' => $resourceId], 'Material uploaded successfully', 201);
+    }
+
+    private function notifyStudentsNewContent(int $courseId, int $lectureId, int $resourceId, string $title): void
+    {
+        $studentIds = array_column($this->courses->getEnrolledStudents($courseId), 'id');
+        if (!$studentIds) {
+            return;
+        }
+        $lecture = $this->content->getLecture($lectureId);
+        $lectureTitle = $lecture['title'] ?? 'a lecture';
+        $this->notifier->notifyMany(
+            $studentIds,
+            'new_content',
+            'New study material uploaded',
+            "\"{$title}\" was added to {$lectureTitle}. Open Learn to view it.",
+            [
+                'course_id'   => $courseId,
+                'lecture_id'  => $lectureId,
+                'resource_id' => $resourceId,
+                'tab'         => 'learn',
+            ],
+            false
+        );
     }
 
     public function update(Request $request): void

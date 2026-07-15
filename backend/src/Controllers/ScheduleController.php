@@ -402,9 +402,20 @@ class ScheduleController extends BaseController
                 }
 
                 $teacherName = trim((string) ($row['teacher'] ?? $row['teacher_name'] ?? ''));
-                $teacherId = $teacherName !== ''
-                    ? ($this->schedules->findTeacherIdByName($teacherName) ?? $defaultTeacherId)
-                    : $defaultTeacherId;
+                $teacherId = null;
+                if ($teacherName !== '') {
+                    $teacherId = $this->schedules->findTeacherIdByName($teacherName);
+                    if (!$teacherId) {
+                        $skipped[] = ['row' => $i + 1, 'reason' => 'teacher not found: ' . $teacherName];
+                    }
+                } elseif ($defaultTeacherId) {
+                    $teacherId = $defaultTeacherId;
+                }
+
+                $remarks = trim((string) ($row['remarks'] ?? ''));
+                if ($teacherName !== '' && !$teacherId) {
+                    $remarks = trim(($remarks !== '' ? $remarks . ' | ' : '') . 'Instructor: ' . $teacherName);
+                }
 
                 $payload = [
                     'course_id'        => $courseId,
@@ -421,6 +432,7 @@ class ScheduleController extends BaseController
                     'end_time'         => $endTime,
                     'duration_minutes' => $this->scheduleService->computeDuration($startTime, $endTime),
                     'meeting_link'     => $row['meeting_link'] ?? $row['meeting_url'] ?? null,
+                    'remarks'          => $remarks !== '' ? $remarks : null,
                     'status'           => 'upcoming',
                     'is_status_locked' => 0,
                     'created_by'       => $request->userId(),

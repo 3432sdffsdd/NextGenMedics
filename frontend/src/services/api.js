@@ -74,6 +74,8 @@ export const adminCoursesService = {
   enrollStudents: (id, studentIds) => api.post(`/courses/${id}/enroll`, { student_ids: studentIds }),
   enrollments: (id) => api.get(`/courses/${id}/enrollments`),
   unenroll: (id, studentId) => api.delete(`/courses/${id}/enroll/${studentId}`),
+  setDownloadVideos: (id, studentId, canDownload) =>
+    api.patch(`/courses/${id}/enroll/${studentId}/download-videos`, { can_download_videos: !!canDownload }),
   students: (id) => api.get(`/courses/${id}/students`),
   structure: (id) => api.get(`/courses/${id}/structure`),
 }
@@ -195,6 +197,7 @@ export const announcementsService = {
 export const discussionService = {
   list: (courseId, params = {}) => api.get(`/discussions/course/${courseId}`, { params }),
   byLecture: (lectureId) => api.get(`/discussions/lecture/${lectureId}`),
+  byAssignment: (assignmentId) => api.get(`/discussions/assignment/${assignmentId}`),
   get: (id) => api.get(`/discussions/${id}`),
   create: (data) => api.post('/discussions', data),
   update: (id, data) => api.put(`/discussions/${id}`, data),

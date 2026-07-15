@@ -480,7 +480,8 @@ class AiController extends BaseController
             'ai_content_published',
             'New revision material available',
             'New notes, flashcards and MCQs are ready for "' . ($lecture['title'] ?? 'a lecture') . '".',
-            ['lecture_id' => $lectureId, 'course_id' => $courseId]
+            ['lecture_id' => $lectureId, 'course_id' => $courseId, 'tab' => 'learn'],
+            false
         );
     }
 

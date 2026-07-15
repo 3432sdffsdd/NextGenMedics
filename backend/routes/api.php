@@ -101,6 +101,7 @@ $router->get('/courses/id/{id}', [CourseController::class, 'showById'], array_me
 $router->get('/courses/{id}/enrollments', [CourseController::class, 'enrollments'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));
 $router->get('/courses/{id}/students', [CourseController::class, 'enrolledStudents'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));
 $router->delete('/courses/{id}/enroll/{studentId}', [CourseController::class, 'unenroll'], array_merge($auth, [RoleMiddleware::admin()]));
+$router->patch('/courses/{id}/enroll/{studentId}/download-videos', [CourseController::class, 'setDownloadVideos'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));
 $router->get('/my/courses', [CourseController::class, 'myCourses'], $auth);
 $router->get('/courses/{id}/structure', [CourseController::class, 'structure'], $auth);
 
@@ -286,6 +287,7 @@ $router->post('/student/premium/revision/{id}/complete', [PremiumStudyController
 
 // ── Lecture Discussions (nested, likes, pins, reports) ──────
 $router->get('/discussions/lecture/{lectureId}', [DiscussionController::class, 'byLecture'], $auth);
+$router->get('/discussions/assignment/{assignmentId}', [DiscussionController::class, 'byAssignment'], $auth);
 $router->post('/discussions/replies/{id}/like', [DiscussionController::class, 'likeReply'], $auth);
 $router->patch('/discussions/replies/{id}/flag', [DiscussionController::class, 'flagReply'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));
 $router->put('/discussions/replies/{id}', [DiscussionController::class, 'editReply'], $auth);

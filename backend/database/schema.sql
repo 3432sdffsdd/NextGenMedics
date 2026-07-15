@@ -149,6 +149,7 @@ CREATE TABLE course_enrollments (
     student_id INT UNSIGNED NOT NULL,
     status ENUM('active', 'completed', 'dropped', 'suspended') DEFAULT 'active',
     progress DECIMAL(5,2) DEFAULT 0.00,
+    can_download_videos TINYINT(1) NOT NULL DEFAULT 0,
     enrolled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP NULL,
     UNIQUE KEY uk_enrollment (course_id, student_id),

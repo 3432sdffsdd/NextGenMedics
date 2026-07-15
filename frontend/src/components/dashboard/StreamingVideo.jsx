@@ -3,6 +3,10 @@ import { mediaEndpoint, mediaUrl } from '../../services/api'
 
 const FULL_LOAD_MAX = 200 * 1024 * 1024 // 200 MB — blob load enables reliable seek
 
+const PLAYBACK_SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2]
+
+const speedLabel = (rate) => (rate === 1 ? '1× (Normal)' : `${rate}×`)
+
 function Loading({ message, progress }) {
   return (
     <div className="flex flex-col items-center justify-center py-16">
@@ -31,6 +35,7 @@ export default function StreamingVideo({ filePath, fileSize = 0, title, allowVid
   const [fullLoading, setFullLoading] = useState(false)
   const [fullProgress, setFullProgress] = useState(0)
   const [error, setError] = useState('')
+  const [playbackRate, setPlaybackRate] = useState(1)
 
   const directUrl = mediaUrl(filePath)
   const canFullLoad = fileSize > 0 && fileSize <= FULL_LOAD_MAX
@@ -41,7 +46,13 @@ export default function StreamingVideo({ filePath, fileSize = 0, title, allowVid
     setError('')
     setSeekLimited(false)
     setBufferHint('')
+    setPlaybackRate(1)
   }, [directUrl, filePath])
+
+  useEffect(() => {
+    const v = videoRef.current
+    if (v) v.playbackRate = playbackRate
+  }, [playbackRate, src])
 
   useEffect(() => () => {
     if (blobUrlRef.current) {
@@ -93,6 +104,7 @@ export default function StreamingVideo({ filePath, fileSize = 0, title, allowVid
       requestAnimationFrame(() => {
         if (v) {
           v.currentTime = t
+          v.playbackRate = playbackRate
           v.play().catch(() => {})
         }
       })
@@ -102,10 +114,11 @@ export default function StreamingVideo({ filePath, fileSize = 0, title, allowVid
       setFullLoading(false)
       setFullProgress(100)
     }
-  }, [filePath, fileSize, fullLoading])
+  }, [filePath, fileSize, fullLoading, playbackRate])
 
   const onLoadedMetadata = (e) => {
     const v = e.target
+    v.playbackRate = playbackRate
     if (!v.duration || !Number.isFinite(v.duration)) return
     if (v.seekable.length > 0) {
       const end = v.seekable.end(v.seekable.length - 1)
@@ -142,15 +155,42 @@ export default function StreamingVideo({ filePath, fileSize = 0, title, allowVid
             className="w-full rounded-xl bg-black"
             src={src}
             onLoadedMetadata={onLoadedMetadata}
+            onRateChange={(e) => {
+              const rate = e.currentTarget.playbackRate
+              if (PLAYBACK_SPEEDS.includes(rate) && rate !== playbackRate) setPlaybackRate(rate)
+            }}
             onWaiting={() => setBufferHint('Buffering…')}
             onSeeking={() => setBufferHint('Loading…')}
             onCanPlay={() => setBufferHint('')}
             onSeeked={() => setBufferHint('')}
             onError={() => setError('Video could not be played. Try “Enable skipping” below or log in again.')}
-            {...(!allowVideoDownload ? { controlsList: 'nodownload noplaybackrate', disablePictureInPicture: true } : {})}
+            {...(!allowVideoDownload
+              ? { controlsList: 'nodownload noplaybackrate', disablePictureInPicture: true }
+              : { controlsList: 'noplaybackrate' })}
           >
             <track kind="captions" />
           </video>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-slate-500">Speed</span>
+            <div className="flex flex-wrap gap-1.5">
+              {PLAYBACK_SPEEDS.map((rate) => (
+                <button
+                  key={rate}
+                  type="button"
+                  onClick={() => setPlaybackRate(rate)}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                    playbackRate === rate
+                      ? 'bg-primary text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                  aria-pressed={playbackRate === rate}
+                >
+                  {speedLabel(rate)}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {bufferHint && (
             <p className="mt-2 text-xs text-slate-400">{bufferHint}</p>

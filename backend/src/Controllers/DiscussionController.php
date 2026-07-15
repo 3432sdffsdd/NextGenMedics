@@ -6,6 +6,7 @@ use App\Core\Response;
 use App\Repositories\DiscussionRepository;
 use App\Repositories\CourseRepository;
 use App\Repositories\ContentRepository;
+use App\Repositories\AssignmentRepository;
 use App\Services\CourseService;
 use App\Services\NotificationService;
 
@@ -15,6 +16,7 @@ class DiscussionController extends BaseController
         private DiscussionRepository $discussions,
         private CourseRepository $courses,
         private ContentRepository $content,
+        private AssignmentRepository $assignments,
         private CourseService $courseService,
         private NotificationService $notifier
     ) {}
@@ -40,6 +42,22 @@ class DiscussionController extends BaseController
             return;
         }
         Response::success($this->discussions->listByLecture($lectureId));
+    }
+
+    public function byAssignment(Request $request): void
+    {
+        $assignmentId = (int) $request->param('assignmentId');
+        $assignment = $this->assignments->findById($assignmentId);
+        if (!$assignment) {
+            Response::error('Assignment not found', 404);
+            return;
+        }
+        $courseId = (int) $assignment['course_id'];
+        if (!$this->courseService->canAccess($courseId, $request->user())) {
+            Response::error('Forbidden', 403);
+            return;
+        }
+        Response::success($this->discussions->listByAssignment($assignmentId));
     }
 
     public function show(Request $request): void
@@ -78,13 +96,27 @@ class DiscussionController extends BaseController
             ? (int) $lectureId
             : null;
 
+        $assignmentId = $request->input('assignment_id');
+        $assignmentId = ($assignmentId !== null && $assignmentId !== '' && $assignmentId !== 'undefined')
+            ? (int) $assignmentId
+            : null;
+
+        if ($assignmentId) {
+            $assignment = $this->assignments->findById($assignmentId);
+            if (!$assignment || (int) $assignment['course_id'] !== $courseId) {
+                Response::error('Invalid assignment for this course', 422);
+                return;
+            }
+        }
+
         try {
             $id = $this->discussions->createThread([
-                'course_id'  => $courseId,
-                'lecture_id' => $lectureId,
-                'author_id'  => $request->userId(),
-                'title'      => trim((string) $data['title']),
-                'content'    => trim((string) $data['content']),
+                'course_id'     => $courseId,
+                'lecture_id'    => $lectureId,
+                'assignment_id' => $assignmentId,
+                'author_id'     => $request->userId(),
+                'title'         => trim((string) $data['title']),
+                'content'       => trim((string) $data['content']),
             ]);
         } catch (\Throwable $e) {
             Response::error('Could not create discussion: ' . $e->getMessage(), 422);

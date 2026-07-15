@@ -4,6 +4,8 @@
 return [
     'app_name' => 'NextGen Medics API',
     'app_env'  => getenv('APP_ENV') ?: 'development',
+    // Application timezone — used for schedule status (completed / live / upcoming).
+    'timezone' => getenv('APP_TIMEZONE') ?: 'Asia/Karachi',
 
     // Database connection
     'db' => [

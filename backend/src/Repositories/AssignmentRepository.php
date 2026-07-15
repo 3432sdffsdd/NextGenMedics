@@ -19,11 +19,16 @@ class AssignmentRepository extends BaseRepository
 
     public function listByCourse(int $courseId): array
     {
+        $discussionCount = $this->columnExists('discussion_threads', 'assignment_id')
+            ? ', (SELECT COUNT(*) FROM discussion_threads dt WHERE dt.assignment_id = a.id AND dt.status != "hidden") AS discussion_count'
+            : ', 0 AS discussion_count';
+
         $stmt = $this->db->prepare(
-            'SELECT a.*,
+            "SELECT a.*,
                     (SELECT COUNT(*) FROM assignment_submissions s WHERE s.assignment_id = a.id) AS submission_count,
                     (SELECT COUNT(*) FROM assignment_questions q WHERE q.assignment_id = a.id) AS question_count
-             FROM assignments a WHERE a.course_id = ? ORDER BY a.due_date DESC'
+                    {$discussionCount}
+             FROM assignments a WHERE a.course_id = ? ORDER BY a.due_date DESC"
         );
         $stmt->execute([$courseId]);
         return $stmt->fetchAll();
@@ -31,8 +36,13 @@ class AssignmentRepository extends BaseRepository
 
     public function listByStudent(int $studentId): array
     {
+        $discussionCount = $this->columnExists('discussion_threads', 'assignment_id')
+            ? ', (SELECT COUNT(*) FROM discussion_threads dt WHERE dt.assignment_id = a.id AND dt.status != "hidden") AS discussion_count'
+            : ', 0 AS discussion_count';
+
         $stmt = $this->db->prepare(
             "SELECT a.*, c.title AS course_title, s.status AS submission_status, s.marks, s.submitted_at
+                    {$discussionCount}
              FROM assignments a
              JOIN courses c ON c.id = a.course_id
              JOIN course_enrollments ce ON ce.course_id = c.id AND ce.student_id = ?
