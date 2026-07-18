@@ -215,6 +215,7 @@ export const discussionService = {
 export const studentAiService = {
   revisionLectures: () => api.get('/student/revision/lectures'),
   revisionContent: (lectureId) => api.get(`/student/revision/lectures/${lectureId}`),
+  studyPack: (lectureId) => api.get(`/student/lectures/${lectureId}/study-pack`),
   flashcards: (params = {}) => api.get('/student/flashcards', { params }),
   flashcardProgress: (id, data) => api.post(`/student/flashcards/${id}/progress`, data),
   mcqPractice: (lectureId) => api.get(`/student/lectures/${lectureId}/mcqs`),
@@ -234,17 +235,46 @@ export const progressService = {
   badges: () => api.get('/student/badges'),
 }
 
+export const studyMaterialService = {
+  summary: () => api.get('/student/study-material/summary'),
+  list: (params = {}) => api.get('/student/study-material', { params }),
+  setWatched: (resourceId, watched) =>
+    api.post('/student/study-material/watch', { resource_id: resourceId, watched: watched ? 1 : 0 }),
+}
+
+/** Premium FCPS Study Planner — PHP algorithms only (no AI). */
+export const fcpsStudyPlannerService = {
+  getPlan: () => api.get('/student/fcps-planner'),
+  generate: (data) => api.post('/student/fcps-planner/generate', data),
+  regenerate: (data = {}) => api.post('/student/fcps-planner/regenerate', data),
+  dashboard: () => api.get('/student/fcps-planner/dashboard'),
+  calendar: (month) => api.get('/student/fcps-planner/calendar', { params: { month } }),
+  day: (date) => api.get('/student/fcps-planner/day', { params: { date } }),
+  setTask: (id, status) => api.patch(`/student/fcps-planner/tasks/${id}`, { status }),
+  rescheduleTask: (id, date) => api.post(`/student/fcps-planner/tasks/${id}/reschedule`, { date }),
+  resetToday: () => api.post('/student/fcps-planner/reset-today'),
+  handleMissed: () => api.post('/student/fcps-planner/missed'),
+  search: (params = {}) => api.get('/student/fcps-planner/search', { params }),
+  reset: () => api.post('/student/fcps-planner/reset'),
+  export: () => api.get('/student/fcps-planner/export'),
+}
+
 export const premiumStudyService = {
   dashboard: () => api.get('/student/premium/dashboard'),
   dailyChallenge: () => api.get('/student/premium/daily-challenge'),
   dailyHistory: () => api.get('/student/premium/daily-challenge/history'),
+  submitDailyChallenge: (data) => api.post('/student/premium/daily-challenge/submit', data),
   weakAreas: () => api.get('/student/premium/weak-areas'),
+  weakAreasDetail: (params = {}) => api.get('/student/premium/weak-areas/detail', { params }),
+  weakAreasPractice: (params = {}) => api.get('/student/premium/weak-areas/practice', { params }),
+  submitWeakPractice: (data) => api.post('/student/premium/weak-areas/practice/submit', data),
   getStudyPlan: () => api.get('/student/premium/study-plan'),
   saveStudyPlan: (data) => api.put('/student/premium/study-plan', data),
   completeTask: (id, status = 'completed') => api.patch(`/student/premium/study-plan/tasks/${id}`, { status }),
   questionBankFilters: () => api.get('/student/premium/question-bank/filters'),
   questionBank: (params = {}) => api.get('/student/premium/question-bank', { params }),
   questionBankPractice: (data) => api.post('/student/premium/question-bank/practice', data),
+  submitBankPractice: (data) => api.post('/student/premium/question-bank/submit', data),
   mistakeStats: () => api.get('/student/premium/mistakes/stats'),
   mistakes: (params = {}) => api.get('/student/premium/mistakes', { params }),
   mistakesPractice: (params = {}) => api.get('/student/premium/mistakes/practice', { params }),
@@ -318,6 +348,29 @@ export const aiService = {
   importWord: (lectureId, formData) => api.post(`/ai/lectures/${lectureId}/import/word`, formData, uploadCfg()),
   importFlashcards: (lectureId, formData) => api.post(`/ai/lectures/${lectureId}/import/flashcards`, formData, uploadCfg()),
   importMcqs: (lectureId, formData) => api.post(`/ai/lectures/${lectureId}/import/mcqs`, formData, uploadCfg()),
+}
+
+/** Gemini staged AI Generation Engine (teacher). */
+export const aiEngineService = {
+  status: () => api.get('/ai/engine/status'),
+  generate: (lectureId, data = {}) => api.post(`/ai/engine/lectures/${lectureId}/generate`, data),
+  process: (jobId) => api.post(`/ai/engine/jobs/${jobId}/process`),
+  resume: (jobId) => api.post(`/ai/engine/jobs/${jobId}/resume`),
+  cancel: (jobId) => api.post(`/ai/engine/jobs/${jobId}/cancel`),
+  jobStatus: (lectureId) => api.get(`/ai/engine/lectures/${lectureId}/job`),
+  review: (lectureId) => api.get(`/ai/engine/lectures/${lectureId}/review`),
+  approve: (lectureId) => api.post(`/ai/engine/lectures/${lectureId}/approve`),
+  publish: (lectureId) => api.post(`/ai/engine/lectures/${lectureId}/publish`),
+}
+
+/** Admin AI engine job dashboard. */
+export const adminAiService = {
+  overview: (params = {}) => api.get('/admin/ai/jobs', { params }),
+  job: (jobId) => api.get(`/admin/ai/jobs/${jobId}`),
+  process: (jobId) => api.post(`/admin/ai/jobs/${jobId}/process`),
+  resume: (jobId) => api.post(`/admin/ai/jobs/${jobId}/resume`),
+  retry: (jobId) => api.post(`/admin/ai/jobs/${jobId}/retry`),
+  cancel: (jobId) => api.post(`/admin/ai/jobs/${jobId}/cancel`),
 }
 
 export const notificationsService = {

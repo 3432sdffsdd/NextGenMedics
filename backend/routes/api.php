@@ -4,6 +4,8 @@
  */
 
 use App\Controllers\AiController;
+use App\Controllers\AiAdminController;
+use App\Controllers\AiEngineController;
 use App\Controllers\AnnouncementController;
 use App\Controllers\AssignmentController;
 use App\Controllers\AttendanceController;
@@ -19,6 +21,8 @@ use App\Controllers\LiveSessionController;
 use App\Controllers\MediaController;
 use App\Controllers\NotificationController;
 use App\Controllers\ProgressController;
+use App\Controllers\StudyMaterialController;
+use App\Controllers\FcpsStudyPlannerController;
 use App\Controllers\PremiumStudyController;
 use App\Controllers\PublicController;
 use App\Controllers\QuizController;
@@ -247,10 +251,30 @@ $router->post('/ai/lectures/{lectureId}/import/mcqs', [AiController::class, 'imp
 $router->post('/ai/lectures/{lectureId}/publish', [AiController::class, 'publish'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));
 $router->put('/ai/lectures/{lectureId}/challenge', [AiController::class, 'saveChallenge'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));
 
+// ── AI Generation Engine (Gemini staged pipeline) ───────────
+$router->get('/ai/engine/status', [AiEngineController::class, 'status'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));
+$router->post('/ai/engine/lectures/{lectureId}/generate', [AiEngineController::class, 'generate'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));
+$router->post('/ai/engine/jobs/{jobId}/process', [AiEngineController::class, 'process'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));
+$router->post('/ai/engine/jobs/{jobId}/resume', [AiEngineController::class, 'resume'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));
+$router->post('/ai/engine/jobs/{jobId}/cancel', [AiEngineController::class, 'cancel'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));
+$router->get('/ai/engine/lectures/{lectureId}/job', [AiEngineController::class, 'jobStatus'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));
+$router->get('/ai/engine/lectures/{lectureId}/review', [AiEngineController::class, 'review'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));
+$router->post('/ai/engine/lectures/{lectureId}/approve', [AiEngineController::class, 'approve'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));
+$router->post('/ai/engine/lectures/{lectureId}/publish', [AiEngineController::class, 'publish'], array_merge($auth, [RoleMiddleware::adminOrTeacher()]));
+
+// ── AI Engine Admin Dashboard ───────────────────────────────
+$router->get('/admin/ai/jobs', [AiAdminController::class, 'overview'], array_merge($auth, [RoleMiddleware::admin()]));
+$router->get('/admin/ai/jobs/{jobId}', [AiAdminController::class, 'job'], array_merge($auth, [RoleMiddleware::admin()]));
+$router->post('/admin/ai/jobs/{jobId}/process', [AiAdminController::class, 'process'], array_merge($auth, [RoleMiddleware::admin()]));
+$router->post('/admin/ai/jobs/{jobId}/resume', [AiAdminController::class, 'resume'], array_merge($auth, [RoleMiddleware::admin()]));
+$router->post('/admin/ai/jobs/{jobId}/retry', [AiAdminController::class, 'retry'], array_merge($auth, [RoleMiddleware::admin()]));
+$router->post('/admin/ai/jobs/{jobId}/cancel', [AiAdminController::class, 'cancel'], array_merge($auth, [RoleMiddleware::admin()]));
+
 // ── Student AI Learning (Revision, Flashcards, MCQs, Challenge) ──
 $student = array_merge($auth, [RoleMiddleware::student()]);
 $router->get('/student/revision/lectures', [StudentAiController::class, 'revisionLectures'], $student);
 $router->get('/student/revision/lectures/{lectureId}', [StudentAiController::class, 'revisionContent'], $student);
+$router->get('/student/lectures/{lectureId}/study-pack', [StudentAiController::class, 'studyPack'], $student);
 $router->get('/student/flashcards', [StudentAiController::class, 'flashcards'], $student);
 $router->post('/student/flashcards/{id}/progress', [StudentAiController::class, 'flashcardProgress'], $student);
 $router->get('/student/lectures/{lectureId}/mcqs', [StudentAiController::class, 'mcqPractice'], $student);
@@ -268,17 +292,44 @@ $router->get('/student/streak', [ProgressController::class, 'streak'], $student)
 $router->get('/student/analytics', [ProgressController::class, 'analytics'], $student);
 $router->get('/student/badges', [ProgressController::class, 'badges'], $student);
 
+// ── Study material (lecture video watch progress) ───────────
+$router->get('/student/study-material/summary', [StudyMaterialController::class, 'summary'], $student);
+$router->get('/student/study-material', [StudyMaterialController::class, 'list'], $student);
+$router->post('/student/study-material/watch', [StudyMaterialController::class, 'toggleWatch'], $student);
+
+// ── Premium FCPS Study Planner (PHP algorithms only — no AI) ─
+$router->get('/student/fcps-planner', [FcpsStudyPlannerController::class, 'getPlan'], $student);
+$router->post('/student/fcps-planner/generate', [FcpsStudyPlannerController::class, 'generate'], $student);
+$router->post('/student/fcps-planner/regenerate', [FcpsStudyPlannerController::class, 'regenerate'], $student);
+$router->get('/student/fcps-planner/dashboard', [FcpsStudyPlannerController::class, 'dashboard'], $student);
+$router->get('/student/fcps-planner/calendar', [FcpsStudyPlannerController::class, 'calendar'], $student);
+$router->get('/student/fcps-planner/day', [FcpsStudyPlannerController::class, 'day'], $student);
+$router->patch('/student/fcps-planner/tasks/{id}', [FcpsStudyPlannerController::class, 'setTask'], $student);
+$router->post('/student/fcps-planner/tasks/{id}/reschedule', [FcpsStudyPlannerController::class, 'rescheduleTask'], $student);
+$router->post('/student/fcps-planner/reset-today', [FcpsStudyPlannerController::class, 'resetToday'], $student);
+$router->post('/student/fcps-planner/missed', [FcpsStudyPlannerController::class, 'missed'], $student);
+$router->get('/student/fcps-planner/search', [FcpsStudyPlannerController::class, 'search'], $student);
+$router->post('/student/fcps-planner/reset', [FcpsStudyPlannerController::class, 'reset'], $student);
+$router->get('/student/fcps-planner/export', [FcpsStudyPlannerController::class, 'export'], $student);
+$router->get('/student/fcps-planner/export/csv', [FcpsStudyPlannerController::class, 'exportCsv'], $student);
+$router->get('/student/fcps-planner/export/print', [FcpsStudyPlannerController::class, 'exportPrint'], $student);
+
 // ── Premium study features ──────────────────────────────────
 $router->get('/student/premium/dashboard', [PremiumStudyController::class, 'dashboard'], $student);
 $router->get('/student/premium/daily-challenge', [PremiumStudyController::class, 'dailyChallenge'], $student);
 $router->get('/student/premium/daily-challenge/history', [PremiumStudyController::class, 'dailyHistory'], $student);
+$router->post('/student/premium/daily-challenge/submit', [PremiumStudyController::class, 'submitDailyChallenge'], $student);
 $router->get('/student/premium/weak-areas', [PremiumStudyController::class, 'weakAreas'], $student);
+$router->get('/student/premium/weak-areas/detail', [PremiumStudyController::class, 'weakAreasDetail'], $student);
+$router->get('/student/premium/weak-areas/practice', [PremiumStudyController::class, 'weakAreasPractice'], $student);
+$router->post('/student/premium/weak-areas/practice/submit', [PremiumStudyController::class, 'submitWeakPractice'], $student);
 $router->get('/student/premium/study-plan', [PremiumStudyController::class, 'getStudyPlan'], $student);
 $router->put('/student/premium/study-plan', [PremiumStudyController::class, 'saveStudyPlan'], $student);
 $router->patch('/student/premium/study-plan/tasks/{id}', [PremiumStudyController::class, 'completeTask'], $student);
 $router->get('/student/premium/question-bank/filters', [PremiumStudyController::class, 'questionBankFilters'], $student);
 $router->get('/student/premium/question-bank', [PremiumStudyController::class, 'questionBank'], $student);
 $router->post('/student/premium/question-bank/practice', [PremiumStudyController::class, 'questionBankPractice'], $student);
+$router->post('/student/premium/question-bank/submit', [PremiumStudyController::class, 'submitBankPractice'], $student);
 $router->get('/student/premium/mistakes/stats', [PremiumStudyController::class, 'mistakeStats'], $student);
 $router->get('/student/premium/mistakes/practice', [PremiumStudyController::class, 'mistakesPractice'], $student);
 $router->get('/student/premium/mistakes', [PremiumStudyController::class, 'mistakes'], $student);

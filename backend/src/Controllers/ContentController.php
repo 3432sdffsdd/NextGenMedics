@@ -4,18 +4,25 @@ namespace App\Controllers;
 use App\Core\Request;
 use App\Core\Response;
 use App\Helpers\FileUploadHelper;
+use App\Repositories\AiJobRepository;
 use App\Repositories\ContentRepository;
 use App\Repositories\CourseRepository;
+use App\Services\AiEngineService;
 use App\Services\CourseService;
 use App\Services\NotificationService;
 
 class ContentController extends BaseController
 {
+    /** File types that can be used as lecture source for the AI engine. */
+    private const AI_SOURCE_EXTS = ['ppt', 'pptx', 'pdf', 'doc', 'docx', 'txt', 'md'];
+
     public function __construct(
         private ContentRepository $content,
         private CourseRepository $courses,
         private CourseService $courseService,
-        private NotificationService $notifier
+        private NotificationService $notifier,
+        private AiEngineService $aiEngine,
+        private AiJobRepository $aiJobs
     ) {}
 
     public function createModule(Request $request): void
@@ -171,7 +178,77 @@ class ContentController extends BaseController
 
         $this->notifyStudentsNewContent((int) $courseId, $lectureId, (int) $resourceId, $title);
 
-        Response::success(['id' => $resourceId], 'Material uploaded successfully', 201);
+        // Auto-start full AI Generation Engine when a lecture PPT/PDF/Word is uploaded.
+        $ai = $this->maybeAutoStartAiEngine(
+            $lectureId,
+            (int) $courseId,
+            $request->userId(),
+            $file ? strtolower(pathinfo((string) ($file['name'] ?? ''), PATHINFO_EXTENSION)) : '',
+            $request
+        );
+
+        Response::success([
+            'id'            => $resourceId,
+            'ai_generation' => $ai,
+        ], $ai['started'] ?? false
+            ? 'Material uploaded — AI study pack generation started'
+            : 'Material uploaded successfully', 201);
+    }
+
+    /**
+     * When a teacher uploads an extractable lecture file, enqueue the Gemini
+     * engine automatically (unless disabled or already running).
+     */
+    private function maybeAutoStartAiEngine(
+        int $lectureId,
+        int $courseId,
+        ?int $userId,
+        string $ext,
+        Request $request
+    ): array {
+        $auto = filter_var($request->input('auto_generate', false), FILTER_VALIDATE_BOOLEAN);
+        if (!$auto) {
+            return ['started' => false, 'reason' => 'disabled'];
+        }
+        if ($ext === '' || !in_array($ext, self::AI_SOURCE_EXTS, true)) {
+            return ['started' => false, 'reason' => 'not_source_file'];
+        }
+        if (!$this->aiEngine->isReady()) {
+            return [
+                'started' => false,
+                'reason'  => 'gemini_not_configured',
+                'hint'    => 'Set GEMINI_API_KEY in backend/.env to enable automatic generation.',
+            ];
+        }
+        if ($this->aiJobs->hasActive($lectureId)) {
+            $existing = $this->aiJobs->latestEngineForLecture($lectureId)
+                ?? $this->aiJobs->latestForLecture($lectureId);
+            return [
+                'started' => false,
+                'reason'  => 'already_running',
+                'job'     => $existing ? $this->aiEngine->snapshot((int) $existing['id']) : null,
+            ];
+        }
+
+        try {
+            $jobId = $this->aiEngine->enqueue($lectureId, $courseId, $userId, null);
+            // Kick off the first step (usually text extraction) so progress starts immediately.
+            @set_time_limit(180);
+            $job = $this->aiEngine->step($jobId);
+            unset($job['source_text']);
+            return [
+                'started'  => true,
+                'job_id'   => $jobId,
+                'job'      => $job,
+                'lecture_id' => $lectureId,
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'started' => false,
+                'reason'  => 'enqueue_failed',
+                'error'   => $e->getMessage(),
+            ];
+        }
     }
 
     private function notifyStudentsNewContent(int $courseId, int $lectureId, int $resourceId, string $title): void

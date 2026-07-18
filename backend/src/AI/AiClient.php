@@ -13,6 +13,9 @@ class AiClient
         $provider = $config['provider'] ?? 'openai';
 
         return match ($provider) {
+            // Native Google Gemini uses the full application config so it can
+            // read the dedicated 'gemini' block (GEMINI_API_KEY, model, ...).
+            'gemini' => self::gemini(),
             // All OpenAI-compatible vendors share one implementation.
             'openai', 'openrouter', 'groq', 'together', 'deepseek', 'azure', 'ollama', 'local'
                 => new OpenAiCompatibleProvider($config),
@@ -25,5 +28,15 @@ class AiClient
     {
         $config = require __DIR__ . '/../../config/config.php';
         return self::make($config['ai'] ?? []);
+    }
+
+    /** Build the native Gemini provider (metered) from the 'gemini' config block. */
+    public static function gemini(?array $geminiConfig = null): MeteredAiProviderInterface
+    {
+        if ($geminiConfig === null) {
+            $config = require __DIR__ . '/../../config/config.php';
+            $geminiConfig = $config['gemini'] ?? [];
+        }
+        return new GeminiProvider($geminiConfig);
     }
 }

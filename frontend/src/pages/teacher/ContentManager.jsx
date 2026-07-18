@@ -217,6 +217,7 @@ export default function ContentManager({ courseId, structure, reload }) {
     <div className="space-y-6">
       <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 px-4 py-3 text-sm text-slate-600">
         <strong className="text-navy">Student visibility:</strong> Videos, PDFs, and files uploaded here appear immediately for <strong>enrolled students</strong> in the Learn tab — no extra publish step.
+        {' '}To generate the full AI study pack, open the <strong>Study tools</strong> tab, select the lecture, and click Generate.
       </div>
       <div className="grid gap-4 lg:grid-cols-3">
         <form onSubmit={addModule} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-soft">

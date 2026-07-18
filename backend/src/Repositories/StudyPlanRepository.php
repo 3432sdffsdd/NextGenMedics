@@ -21,7 +21,7 @@ class StudyPlanRepository extends BaseRepository
         return (int) $plan['id'];
     }
 
-    public function clearFutureTasks(int $planId, string fromDate): void
+    public function clearFutureTasks(int $planId, string $fromDate): void
     {
         $stmt = $this->db->prepare('DELETE FROM study_plan_tasks WHERE plan_id = ? AND task_date >= ?');
         $stmt->execute([$planId, $fromDate]);

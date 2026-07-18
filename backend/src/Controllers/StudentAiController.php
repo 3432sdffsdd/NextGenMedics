@@ -7,12 +7,19 @@ use App\Repositories\AiContentRepository;
 use App\Repositories\AttemptRepository;
 use App\Repositories\BookmarkRepository;
 use App\Repositories\ChallengeRepository;
+use App\Repositories\ClinicalCaseRepository;
 use App\Repositories\ContentRepository;
 use App\Repositories\CourseRepository;
 use App\Repositories\DailyChallengeSetRepository;
+use App\Repositories\DiseaseComparisonRepository;
+use App\Repositories\DrugTableRepository;
 use App\Repositories\FlashcardRepository;
 use App\Repositories\McqRepository;
 use App\Repositories\MistakeRepository;
+use App\Repositories\MnemonicRepository;
+use App\Repositories\RevisionSheetRepository;
+use App\Repositories\VideoSimulationRepository;
+use App\Repositories\VivaQuestionRepository;
 use App\Services\StudyService;
 
 /**
@@ -33,7 +40,14 @@ class StudentAiController extends BaseController
         private CourseRepository $courses,
         private StudyService $study,
         private MistakeRepository $mistakes,
-        private DailyChallengeSetRepository $dailySets
+        private DailyChallengeSetRepository $dailySets,
+        private DrugTableRepository $drugs,
+        private DiseaseComparisonRepository $comparisons,
+        private MnemonicRepository $mnemonics,
+        private VivaQuestionRepository $viva,
+        private ClinicalCaseRepository $cases,
+        private RevisionSheetRepository $revisionSheets,
+        private VideoSimulationRepository $videos
     ) {}
 
     // ── Revision Center ────────────────────────────────────────
@@ -61,6 +75,47 @@ class StudentAiController extends BaseController
             'content'    => $this->content->findByLecture($lectureId),
             'highlights' => $this->bookmarks->listHighlights($studentId, $lectureId),
             'bookmarked' => in_array($lectureId, $this->bookmarks->bookmarkedIds($studentId, 'lecture'), true),
+        ]);
+    }
+
+    /**
+     * Full study pack from SQL only — never calls Gemini.
+     * Tabs: Detailed Notes, Summary, High Yield, Drug Table, Disease Comparison,
+     * Mnemonics, Flashcards, MCQs, Clinical Cases, Revision Sheet, Video Simulation.
+     */
+    public function studyPack(Request $request): void
+    {
+        $studentId = $request->userId();
+        $lectureId = (int) $request->param('lectureId');
+
+        if (!$this->enrolledInLecture($studentId, $lectureId) || !$this->content->isPublished($lectureId)) {
+            Response::error('Not available', 404);
+            return;
+        }
+
+        $this->study->recordActivity($studentId, 'revision');
+
+        $sheet = $this->revisionSheets->findByLecture($lectureId);
+        if ($sheet && !in_array($sheet['status'] ?? '', ['published', 'approved'], true)) {
+            $sheet = null;
+        }
+        $video = $this->videos->findByLecture($lectureId);
+        if ($video && !in_array($video['status'] ?? '', ['published', 'approved'], true)) {
+            $video = null;
+        }
+
+        Response::success([
+            'lecture'             => $this->lectures->getLecture($lectureId),
+            'content'             => $this->content->findByLecture($lectureId),
+            'drugs'               => $this->drugs->listByLecture($lectureId, 'published'),
+            'disease_comparisons' => $this->comparisons->listByLecture($lectureId, 'published'),
+            'mnemonics'           => $this->mnemonics->listByLecture($lectureId, 'published'),
+            'flashcards'          => $this->flashcards->listByLecture($lectureId, 'approved'),
+            'viva_questions'      => $this->viva->listByLecture($lectureId, 'published'),
+            'mcqs'                => $this->mcqs->listByLecture($lectureId, 'published', true),
+            'clinical_cases'      => $this->cases->listByLecture($lectureId, 'published'),
+            'revision_sheet'      => $sheet,
+            'video_simulation'    => $video,
         ]);
     }
 

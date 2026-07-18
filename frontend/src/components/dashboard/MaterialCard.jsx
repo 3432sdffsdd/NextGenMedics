@@ -4,12 +4,24 @@ import { downloadMedia } from '../../services/api'
 import { useToast } from '../../context/ToastContext'
 import { fileKind, formatBytes, formatDate } from '../../utils/files'
 
-export default function MaterialCard({ resource, canManage = false, allowVideoDownload = true, onEdit, onDelete, onView }) {
+export default function MaterialCard({
+  resource,
+  canManage = false,
+  allowVideoDownload = true,
+  onEdit,
+  onDelete,
+  onView,
+  showWatchedCheckbox = false,
+  watched = false,
+  watchedDisabled = false,
+  onToggleWatched,
+}) {
   const toast = useToast()
   const [downloading, setDownloading] = useState(false)
   const { label, Icon, tone } = fileKind(resource)
   const isLink = !!resource.external_url && !resource.file_path
   const showDownload = resource.file_path && (label !== 'Video' || allowVideoDownload)
+  const isVideo = label === 'Video' || resource.type === 'video'
 
   const handleDownload = async (e) => {
     e.preventDefault()
@@ -40,6 +52,19 @@ export default function MaterialCard({ resource, canManage = false, allowVideoDo
           {resource.uploader_name && <p className="mt-0.5 text-xs text-slate-400">by {resource.uploader_name}</p>}
         </div>
       </div>
+
+      {showWatchedCheckbox && isVideo && (
+        <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2 text-sm text-navy">
+          <input
+            type="checkbox"
+            checked={!!watched}
+            disabled={watchedDisabled}
+            onChange={(e) => onToggleWatched?.(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+          />
+          <span className="font-medium">{watched ? 'Watched' : 'Mark as watched'}</span>
+        </label>
+      )}
 
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-50 pt-3">
         {isLink ? (

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { studentAiService } from '../../services/api'
+import { premiumStudyService, studentAiService } from '../../services/api'
 import Alert from './Alert'
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E']
@@ -70,19 +70,30 @@ export default function McqPlayer({
     setSubmitting(true)
     const timeSpent = Math.round((Date.now() - startRef.current) / 1000)
     try {
-      const { data } = await studentAiService.submitAttempt({
+      const payload = {
         source,
         challenge_id: challengeId,
         challenge_day: challengeDay,
         daily_set_id: dailySetId,
         time_spent_seconds: timeSpent,
         answers: questions.map((q) => ({ mcq_id: q.id, selected_option: answers[q.id] || null })),
-      })
+      }
+      let data
+      if (source === 'daily') {
+        ({ data } = await premiumStudyService.submitDailyChallenge(payload))
+      } else if (source === 'weak') {
+        ({ data } = await premiumStudyService.submitWeakPractice(payload))
+      } else if (source === 'bank') {
+        ({ data } = await premiumStudyService.submitBankPractice(payload))
+      } else {
+        ({ data } = await studentAiService.submitAttempt(payload))
+      }
       setResult(data.data)
       onFinished?.(data.data)
     } catch (err) {
       submittedRef.current = false
-      setError(auto ? 'Time is up — could not submit automatically. Please try again.' : 'Could not submit your answers. Please try again.')
+      const msg = err?.response?.data?.message
+      setError(msg || (auto ? 'Time is up — could not submit automatically. Please try again.' : 'Could not submit your answers. Please try again.'))
     } finally {
       setSubmitting(false)
     }

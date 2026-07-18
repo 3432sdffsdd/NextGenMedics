@@ -43,7 +43,7 @@ export default function MyMistakes() {
       <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-soft">
         <McqPlayer
           questions={practice}
-          source="mistakes"
+          source="weak"
           title="Practice My Mistakes"
           onClose={() => { setPractice(null); load(page) }}
         />
@@ -56,7 +56,7 @@ export default function MyMistakes() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="font-display text-2xl font-bold text-navy">My Mistakes</h2>
-          <p className="text-sm text-slate-500">Questions you got wrong are saved here. Master a question after 3 consecutive correct answers.</p>
+          <p className="text-sm text-slate-500">Wrong answers from course quizzes and Daily Challenges appear here. Practice them to improve weak topics.</p>
         </div>
         <button type="button" onClick={startPractice} className="btn-primary text-sm"><FiPlay className="inline mr-1" /> Practice My Mistakes</button>
       </div>
@@ -69,34 +69,37 @@ export default function MyMistakes() {
         </div>
       )}
 
-      <div className="mt-6 grid gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-soft sm:grid-cols-2 lg:grid-cols-5">
-        <input type="text" placeholder="Subject" value={filters.subject} onChange={(e) => setFilters((f) => ({ ...f, subject: e.target.value }))} className="input-field text-sm" />
-        <input type="text" placeholder="Chapter" value={filters.chapter} onChange={(e) => setFilters((f) => ({ ...f, chapter: e.target.value }))} className="input-field text-sm" />
-        <input type="text" placeholder="Topic" value={filters.topic} onChange={(e) => setFilters((f) => ({ ...f, topic: e.target.value }))} className="input-field text-sm" />
+      <div className="mt-6 grid gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-soft sm:grid-cols-2 lg:grid-cols-4">
+        <input type="text" placeholder="Topic" value={filters.topic || filters.subject} onChange={(e) => setFilters((f) => ({ ...f, topic: e.target.value, subject: e.target.value }))} className="input-field text-sm" />
         <input type="date" value={filters.date_from} onChange={(e) => setFilters((f) => ({ ...f, date_from: e.target.value }))} className="input-field text-sm" />
+        <input type="date" value={filters.date_to} onChange={(e) => setFilters((f) => ({ ...f, date_to: e.target.value }))} className="input-field text-sm" />
         <button type="button" onClick={() => load(1)} className="btn-secondary text-sm">Filter</button>
       </div>
 
       {loading ? (
         <p className="mt-8 text-center text-slate-400">Loading mistakes…</p>
       ) : items.length === 0 ? (
-        <div className="mt-6"><Alert>No active mistakes — great work! Wrong answers from MCQ practice will appear here automatically.</Alert></div>
+        <div className="mt-6"><Alert>No mistakes yet — wrong answers from course quizzes and Daily Challenges will appear here.</Alert></div>
       ) : (
         <div className="mt-6 space-y-4">
           {items.map((m) => (
             <div key={m.id} className="rounded-2xl border border-slate-100 bg-white p-5 shadow-soft">
               <p className="font-medium text-navy">{m.question}</p>
               <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                {m.subject && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">{m.subject}</span>}
-                {m.chapter && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">{m.chapter}</span>}
-                {m.topic && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">{m.topic}</span>}
-                <span className="text-slate-400">Wrong ×{m.wrong_count}</span>
-                {m.consecutive_correct > 0 && <span className="text-green-600">{m.consecutive_correct}/3 toward mastered</span>}
+                {(m.topic || m.subject) && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">{m.topic || m.subject}</span>}
+                {m.source && (
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">
+                    {m.source === 'daily' ? 'Daily Challenge'
+                      : m.source === 'practice' ? 'Question Bank'
+                        : m.source === 'weak' ? 'Weak Areas'
+                          : 'Course Quiz'}
+                  </span>
+                )}
               </div>
               {m.explanation && (
                 <p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-600"><span className="font-semibold">Explanation:</span> {m.explanation}</p>
               )}
-              <p className="mt-2 text-xs text-slate-400">Last wrong: {new Date(m.last_wrong_at).toLocaleDateString()}</p>
+              <p className="mt-2 text-xs text-slate-400">Last wrong: {m.last_wrong_at ? new Date(m.last_wrong_at).toLocaleDateString() : '—'}</p>
             </div>
           ))}
         </div>

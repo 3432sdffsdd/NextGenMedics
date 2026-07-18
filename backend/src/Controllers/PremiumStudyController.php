@@ -35,17 +35,69 @@ class PremiumStudyController extends BaseController
 
     public function dailyHistory(Request $request): void
     {
-        $studentId = $request->userId();
-        $stmt = $this->attempts;
-        Response::success(array_values(array_filter(
-            $stmt->recentByStudent($studentId, 30),
-            fn($a) => ($a['source'] ?? '') === 'daily'
-        )));
+        Response::success($this->premium->dailyHistory($request->userId(), 30));
+    }
+
+    public function submitDailyChallenge(Request $request): void
+    {
+        $answers = $request->input('answers', []);
+        if (!is_array($answers) || !$answers) {
+            Response::error('No answers submitted', 422);
+            return;
+        }
+        $setId = (int) $request->input('daily_set_id');
+        if ($setId <= 0) {
+            Response::error('daily_set_id is required', 422);
+            return;
+        }
+        try {
+            $result = $this->premium->submitDailyChallenge(
+                $request->userId(),
+                $setId,
+                $answers,
+                (int) $request->input('time_spent_seconds', 0)
+            );
+            Response::success($result, 'Daily challenge submitted');
+        } catch (\RuntimeException $e) {
+            $code = str_contains(strtolower($e->getMessage()), 'already completed') ? 409 : 400;
+            Response::error($e->getMessage(), $code);
+        }
     }
 
     public function weakAreas(Request $request): void
     {
-        Response::success($this->premium->dashboardSummary($request->userId())['weak_areas']);
+        Response::success($this->premium->weakAreasSummary($request->userId(), 10));
+    }
+
+    public function weakAreasDetail(Request $request): void
+    {
+        $page = max(1, (int) $request->query('page', 1));
+        $perPage = min(50, max(10, (int) $request->query('per_page', 20)));
+        Response::success($this->premium->weakAreasDetail($request->userId(), $page, $perPage));
+    }
+
+    public function weakAreasPractice(Request $request): void
+    {
+        $limitRaw = $request->input('limit', $request->query('limit', 10));
+        $limit = $limitRaw === 'all' || $limitRaw === '0' ? 0 : min(100, max(1, (int) $limitRaw));
+        Response::success($this->premium->practiceWeakAreas($request->userId(), $limit));
+    }
+
+    public function submitWeakPractice(Request $request): void
+    {
+        $answers = $request->input('answers', []);
+        if (!is_array($answers) || !$answers) {
+            Response::error('No answers submitted', 422);
+            return;
+        }
+        Response::success(
+            $this->premium->submitWeakPractice(
+                $request->userId(),
+                $answers,
+                (int) $request->input('time_spent_seconds', 0)
+            ),
+            'Practice submitted'
+        );
     }
 
     public function getStudyPlan(Request $request): void
@@ -103,51 +155,54 @@ class PremiumStudyController extends BaseController
 
     public function questionBankFilters(Request $request): void
     {
-        $courseIds = array_column($this->courses->listByStudent($request->userId()), 'id');
-        Response::success($this->mcqs->filterOptionsForStudent($request->userId(), $courseIds));
+        Response::success($this->premium->questionBankFilters($request->userId()));
     }
 
     public function questionBank(Request $request): void
     {
-        $studentId = $request->userId();
-        $courseIds = array_column($this->courses->listByStudent($studentId), 'id');
         $page = max(1, (int) $request->query('page', 1));
         $perPage = min(50, max(10, (int) $request->query('per_page', 20)));
         $filters = [
-            'subject'         => $request->query('subject'),
-            'chapter'         => $request->query('chapter'),
-            'topic'           => $request->query('topic'),
-            'difficulty'      => $request->query('difficulty'),
-            'search'          => $request->query('search'),
-            'attempt_filter'  => $request->query('attempt_filter'),
-            'bookmarked'      => $request->query('bookmarked') ? 1 : null,
-            'random'          => $request->query('random') ? 1 : null,
+            'quiz_id'        => $request->query('quiz_id'),
+            'topic'          => $request->query('topic'),
+            'search'         => $request->query('search'),
+            'attempt_filter' => $request->query('attempt_filter'),
         ];
-        Response::success($this->mcqs->searchForStudent($studentId, $courseIds, $filters, $page, $perPage, false));
+        Response::success($this->premium->questionBank($request->userId(), $filters, $page, $perPage));
     }
 
     public function questionBankPractice(Request $request): void
     {
-        $studentId = $request->userId();
-        $courseIds = array_column($this->courses->listByStudent($studentId), 'id');
         $limit = min(50, max(5, (int) $request->input('limit', 20)));
-        $mode = $request->input('mode', 'random');
-        $filters = ['random' => 1];
-        if ($mode === 'topic' && $request->input('topic')) {
-            $filters['topic'] = $request->input('topic');
-        } elseif ($mode === 'subject' && $request->input('subject')) {
-            $filters['subject'] = $request->input('subject');
-        }
-        if ($request->input('attempt_filter')) {
-            $filters['attempt_filter'] = $request->input('attempt_filter');
-        }
-        $result = $this->mcqs->searchForStudent($studentId, $courseIds, $filters, 1, $limit, false);
+        $filters = [
+            'quiz_id'        => $request->input('quiz_id'),
+            'topic'          => $request->input('topic'),
+            'attempt_filter' => $request->input('attempt_filter'),
+        ];
+        $pack = $this->premium->questionBankPractice($request->userId(), $filters, $limit);
         Response::success([
-            'questions'      => $result['items'] ?? [],
-            'mode'           => $mode,
+            'questions'      => $pack['questions'] ?? [],
+            'total'          => $pack['total'] ?? 0,
             'timed'          => (bool) $request->input('timed'),
             'time_limit_sec' => $request->input('timed') ? (int) ($request->input('time_limit_minutes', 20) * 60) : null,
         ]);
+    }
+
+    public function submitBankPractice(Request $request): void
+    {
+        $answers = $request->input('answers', []);
+        if (!is_array($answers) || !$answers) {
+            Response::error('No answers submitted', 422);
+            return;
+        }
+        Response::success(
+            $this->premium->submitBankPractice(
+                $request->userId(),
+                $answers,
+                (int) $request->input('time_spent_seconds', 0)
+            ),
+            'Practice submitted'
+        );
     }
 
     public function mistakes(Request $request): void
@@ -159,24 +214,24 @@ class PremiumStudyController extends BaseController
             'topic'     => $request->query('topic'),
             'date_from' => $request->query('date_from'),
             'date_to'   => $request->query('date_to'),
-            'status'    => $request->query('status', 'active'),
         ];
-        Response::success($this->mistakes->listForStudent($request->userId(), $filters, $page, 20));
+        // Teacher quiz attempts + Daily Challenge (not Gemini Study Tools MCQs)
+        Response::success($this->premium->quizMistakes($request->userId(), $filters, $page, 20));
     }
 
     public function mistakeStats(Request $request): void
     {
-        Response::success($this->mistakes->stats($request->userId()));
+        Response::success($this->premium->quizMistakeStats($request->userId()));
     }
 
     public function mistakesPractice(Request $request): void
     {
         $studentId = $request->userId();
         $limit = min(50, max(5, (int) $request->query('limit', 20)));
-        $ids = $this->mistakes->practiceIds($studentId, $limit);
+        $pack = $this->premium->practiceWeakAreas($studentId, $limit);
         Response::success([
-            'questions' => $this->mcqs->findByIds($ids, false),
-            'count'     => count($ids),
+            'questions' => $pack['questions'] ?? [],
+            'count'     => $pack['total'] ?? 0,
         ]);
     }
 

@@ -20,7 +20,7 @@ function Countdown({ seconds }) {
 
 const REASON_HINTS = {
   not_enrolled: 'Browse courses and enroll to start your daily challenge.',
-  no_questions: 'Daily Challenge uses Study Tools MCQs (not course quizzes). Your teacher must generate and publish MCQs from the Study Tools tab on each lecture.',
+  no_questions: 'Daily Challenge uses MCQs from quizzes your teacher uploaded and published. Ask them to publish course quizzes.',
 }
 
 export default function DailyChallenge() {
@@ -54,7 +54,7 @@ export default function DailyChallenge() {
           questions={challenge.questions}
           source="daily"
           dailySetId={challenge.daily_set_id}
-          timeLimitSeconds={challenge.duration_minutes * 60}
+          timeLimitSeconds={(challenge.duration_minutes || 10) * 60}
           title={`Today's Challenge · ${challenge.total_questions} MCQs`}
           onClose={() => { setActive(false); load() }}
         />
@@ -69,12 +69,12 @@ export default function DailyChallenge() {
     <div>
       <h2 className="font-display text-2xl font-bold text-navy">Daily Challenge</h2>
       <p className="text-sm text-slate-500">
-        10 random MCQs from your Study Tools question bank. One attempt per day — 10 minute limit.
-        Course quizzes are separate and do not feed this challenge.
+        10 random MCQs from your teachers&apos; published course quizzes. One attempt per day — 10 minute limit.
+        Questions you have already seen are skipped until the full bank is used.
       </p>
 
       {loading ? (
-        <p className="mt-8 text-center text-slate-400">Loading today's challenge…</p>
+        <p className="mt-8 text-center text-slate-400">Loading today&apos;s challenge…</p>
       ) : loadError ? (
         <div className="mt-6 space-y-3">
           <Alert>{loadError}</Alert>
@@ -85,11 +85,6 @@ export default function DailyChallenge() {
       ) : unavailable ? (
         <div className="mt-6 space-y-3">
           <Alert>{challenge.message || REASON_HINTS[challenge.reason] || 'No challenge available right now.'}</Alert>
-          {challenge.reason === 'no_questions' && (
-            <p className="text-sm text-slate-500">
-              After your teacher publishes Study Tools MCQs, open a lecture's Study Tools tab and practice a few questions — future challenges will prefer topics you have studied.
-            </p>
-          )}
         </div>
       ) : !challenge ? (
         <div className="mt-6"><Alert>Could not load challenge data.</Alert></div>
@@ -101,20 +96,20 @@ export default function DailyChallenge() {
                 <FiZap size={28} />
               </div>
               <div className="flex-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-primary">Today's Challenge</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-primary">Today&apos;s Challenge</p>
                 <h3 className="mt-1 font-display text-xl font-bold text-navy">
                   {challenge.completed
                     ? "Today's Challenge Completed"
-                    : `${challenge.total_questions}${challenge.target_questions ? ` / ${challenge.target_questions}` : ''} MCQs · ${challenge.duration_minutes} min`}
+                    : `${challenge.total_questions || 10} Questions · ${challenge.duration_minutes || 10} min`}
                 </h3>
                 <div className="mt-2 flex flex-wrap gap-4 text-sm text-slate-500">
-                  <span className="flex items-center gap-1"><FiClock /> {challenge.duration_minutes} minutes</span>
-                  <span className="flex items-center gap-1"><FiTarget /> From Study Tools MCQs</span>
+                  <span className="flex items-center gap-1"><FiClock /> {challenge.duration_minutes || 10} minutes</span>
+                  <span className="flex items-center gap-1"><FiTarget /> From teacher quizzes</span>
                 </div>
                 {challenge.completed ? (
                   <div className="mt-4 space-y-2">
                     <div className="flex items-center gap-2 rounded-xl bg-green-50 px-4 py-2.5 text-sm font-semibold text-green-600">
-                      <FiCheckCircle /> Completed
+                      <FiCheckCircle /> Completed Today
                       {challenge.last_score != null && <span className="ml-2 font-normal">Score: {Math.round(challenge.last_score)}%</span>}
                     </div>
                     <p className="text-sm text-slate-500">
@@ -123,10 +118,10 @@ export default function DailyChallenge() {
                   </div>
                 ) : canStart ? (
                   <button type="button" onClick={() => setActive(true)} className="btn-primary mt-4 text-sm">
-                    Start challenge
+                    Start Challenge
                   </button>
                 ) : (
-                  <Alert className="mt-4">Not enough questions in today's set. Check back after your teacher publishes more Study Tools MCQs.</Alert>
+                  <Alert className="mt-4">Not enough questions in today&apos;s set. Check back after your teacher publishes more quizzes.</Alert>
                 )}
               </div>
             </div>
@@ -149,7 +144,7 @@ export default function DailyChallenge() {
                   <tbody>
                     {history.slice(0, 15).map((h) => (
                       <tr key={h.id} className="border-b border-slate-50">
-                        <td className="px-4 py-3">{new Date(h.submitted_at).toLocaleDateString()}</td>
+                        <td className="px-4 py-3">{new Date(h.submitted_at || h.challenge_date).toLocaleDateString()}</td>
                         <td className="px-4 py-3 font-semibold text-navy">{Math.round(h.score)}%</td>
                         <td className="px-4 py-3 text-green-600">{h.correct_count}</td>
                         <td className="px-4 py-3 text-red-500">{h.wrong_count}</td>
@@ -163,6 +158,7 @@ export default function DailyChallenge() {
           )}
 
           <div className="mt-8 flex flex-wrap gap-3">
+            <Link to="/student/weak-areas" className="btn-secondary text-sm"><FiTarget className="inline mr-1" /> Weak Areas</Link>
             <Link to="/student/question-bank" className="btn-secondary text-sm"><FiBookOpen className="inline mr-1" /> Question Bank</Link>
             <Link to="/student/mistakes" className="btn-secondary text-sm"><FiAlertCircle className="inline mr-1" /> My Mistakes</Link>
           </div>

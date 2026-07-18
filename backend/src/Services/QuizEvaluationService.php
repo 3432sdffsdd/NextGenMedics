@@ -2,10 +2,14 @@
 namespace App\Services;
 
 use App\Repositories\QuizRepository;
+use App\Repositories\StudentQuestionHistoryRepository;
 
 class QuizEvaluationService
 {
-    public function __construct(private QuizRepository $quizzes) {}
+    public function __construct(
+        private QuizRepository $quizzes,
+        private StudentQuestionHistoryRepository $questionHistory
+    ) {}
 
     public function evaluateAttempt(int $attemptId, array $answers, ?int $timeTakenSeconds = null): array
     {
@@ -24,6 +28,8 @@ class QuizEvaluationService
         $wrong = 0;
         $unanswered = 0;
         $showReview = (bool) ($quiz['show_review'] ?? 1);
+        $studentId = (int) $attempt['student_id'];
+        $attemptDate = date('Y-m-d');
 
         foreach ($questions as $question) {
             $totalMarks += (float) $question['marks'];
@@ -46,6 +52,21 @@ class QuizEvaluationService
                 'is_correct'           => $result['is_correct'],
                 'marks_awarded'        => $result['marks'],
             ]);
+
+            // Feed Weak Areas / Mistakes / Daily Challenge history from Quizzes tab
+            if ($hasAnswer && $result['is_correct'] !== null) {
+                $letter = $this->selectedToLetter($question, $result['selected'] ?? null);
+                $this->questionHistory->record(
+                    $studentId,
+                    (int) $question['id'],
+                    (bool) $result['is_correct'],
+                    $letter,
+                    $attemptDate,
+                    null,
+                    null,
+                    'quiz'
+                );
+            }
 
             $totalScore += $result['marks'];
 
@@ -104,6 +125,26 @@ class QuizEvaluationService
             'submitted_at'        => $updated['submitted_at'] ?? null,
             'review'              => ($quiz['auto_evaluate'] && $showReview) ? $review : null,
         ];
+    }
+
+    private function selectedToLetter(array $question, mixed $selected): ?string
+    {
+        if (!is_array($selected) || !$selected) {
+            return null;
+        }
+        $selectedId = (int) $selected[0];
+        $letters = ['A', 'B', 'C', 'D', 'E'];
+        $i = 0;
+        foreach ($question['options'] ?? [] as $opt) {
+            if ($i >= 5) {
+                break;
+            }
+            if ((int) $opt['id'] === $selectedId) {
+                return $letters[$i];
+            }
+            $i++;
+        }
+        return null;
     }
 
     private function hasAnswer(string $type, mixed $answer): bool

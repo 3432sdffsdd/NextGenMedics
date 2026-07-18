@@ -15,10 +15,10 @@ import TabBadge from '../../components/dashboard/TabBadge'
 const TABS = ['content', 'study tools', 'quizzes', 'assignments', 'attendance', 'live class', 'announcements', 'discussions', 'schedule']
 const BADGE_TABS = new Set(['quizzes', 'assignments', 'discussions'])
 
-/** Map notification tab names to teacher hub tabs */
 function resolveTeacherTab(raw) {
   if (!raw) return null
   if (raw === 'learn') return 'content'
+  if (raw === 'ai engine') return 'study tools'
   return TABS.includes(raw) ? raw : null
 }
 

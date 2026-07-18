@@ -70,9 +70,18 @@ class Application
             'App\Repositories\ScheduleRepository',
             'App\Repositories\BatchRepository',
             'App\Repositories\AiJobRepository',
+            'App\Repositories\AiJobStageRepository',
+            'App\Repositories\AiGenerationLogRepository',
             'App\Repositories\AiContentRepository',
             'App\Repositories\FlashcardRepository',
             'App\Repositories\McqRepository',
+            'App\Repositories\DrugTableRepository',
+            'App\Repositories\DiseaseComparisonRepository',
+            'App\Repositories\MnemonicRepository',
+            'App\Repositories\VivaQuestionRepository',
+            'App\Repositories\ClinicalCaseRepository',
+            'App\Repositories\RevisionSheetRepository',
+            'App\Repositories\VideoSimulationRepository',
             'App\Repositories\ChallengeRepository',
             'App\Repositories\StreakRepository',
             'App\Repositories\AttemptRepository',
@@ -82,6 +91,10 @@ class Application
             'App\Repositories\DailyChallengeSetRepository',
             'App\Repositories\StudyPlanRepository',
             'App\Repositories\RevisionSessionRepository',
+            'App\Repositories\StudentQuestionHistoryRepository',
+            'App\Repositories\QuizQuestionBankRepository',
+            'App\Repositories\StudentVideoWatchRepository',
+            'App\Repositories\FcpsStudyPlannerRepository',
         ];
 
         foreach ($repos as $repo) {
@@ -115,7 +128,8 @@ class Application
 
         $this->container->singleton('App\Services\QuizEvaluationService', function ($c) {
             return new \App\Services\QuizEvaluationService(
-                $c->get('App\Repositories\QuizRepository')
+                $c->get('App\Repositories\QuizRepository'),
+                $c->get('App\Repositories\StudentQuestionHistoryRepository')
             );
         });
 
@@ -133,6 +147,10 @@ class Application
 
         // ── AI Learning Assistant ──────────────────────────────
         $this->container->singleton('App\AI\AiProviderInterface', fn() => \App\AI\AiClient::fromAppConfig());
+
+        // Native Gemini engine provider (metered: tokens/latency/cost). Bound to
+        // an interface so the model can change via config without code changes.
+        $this->container->singleton('App\AI\MeteredAiProviderInterface', fn() => \App\AI\AiClient::gemini());
 
         $this->container->singleton('App\Services\TextExtractionService', fn() => new \App\Services\TextExtractionService());
 
@@ -188,7 +206,41 @@ class Application
                 $c->get('App\Repositories\RevisionSessionRepository'),
                 $c->get('App\Repositories\AnalyticsRepository'),
                 $c->get('App\Repositories\AttemptRepository'),
-                $c->get('App\Repositories\FlashcardRepository')
+                $c->get('App\Repositories\FlashcardRepository'),
+                $c->get('App\Repositories\QuizQuestionBankRepository'),
+                $c->get('App\Repositories\StudentQuestionHistoryRepository'),
+                $c->get('App\Repositories\StreakRepository'),
+                $c->get('App\Services\StudyService')
+            );
+        });
+
+        // ── Premium FCPS Study Planner (PHP only, no AI) ───────
+        $this->container->singleton('App\Services\FcpsPlanner\CalendarService', fn() => new \App\Services\FcpsPlanner\CalendarService());
+        $this->container->singleton('App\Services\FcpsPlanner\ProgressService', function ($c) {
+            return new \App\Services\FcpsPlanner\ProgressService(
+                $c->get('App\Repositories\FcpsStudyPlannerRepository')
+            );
+        });
+        $this->container->singleton('App\Services\FcpsPlanner\StatisticsService', function ($c) {
+            return new \App\Services\FcpsPlanner\StatisticsService(
+                $c->get('App\Repositories\FcpsStudyPlannerRepository'),
+                $c->get('App\Services\FcpsPlanner\ProgressService')
+            );
+        });
+        $this->container->singleton('App\Services\FcpsPlanner\ExportService', function ($c) {
+            return new \App\Services\FcpsPlanner\ExportService(
+                $c->get('App\Repositories\FcpsStudyPlannerRepository'),
+                $c->get('App\Services\FcpsPlanner\StatisticsService')
+            );
+        });
+        $this->container->singleton('App\Services\FcpsPlanner\StudyPlannerService', function ($c) {
+            return new \App\Services\FcpsPlanner\StudyPlannerService(
+                $c->get('App\Repositories\FcpsStudyPlannerRepository'),
+                $c->get('App\Services\FcpsPlanner\CalendarService'),
+                $c->get('App\Services\FcpsPlanner\StatisticsService'),
+                $c->get('App\Services\FcpsPlanner\ProgressService'),
+                $c->get('App\Services\FcpsPlanner\ExportService'),
+                $c->get('App\Services\NotificationService')
             );
         });
 
@@ -202,6 +254,36 @@ class Application
                 $c->get('App\Repositories\McqRepository'),
                 $c->get('App\Repositories\ContentRepository'),
                 $c->get('App\Services\NotificationService')
+            );
+        });
+
+        // ── AI Generation Engine (Gemini staged pipeline) ──────
+        $this->container->singleton('App\AI\Prompts\PromptRepository', fn() => new \App\AI\Prompts\PromptRepository());
+        $this->container->singleton('App\AI\Prompts\PromptBuilder', function ($c) {
+            return new \App\AI\Prompts\PromptBuilder($c->get('App\AI\Prompts\PromptRepository'));
+        });
+        $this->container->singleton('App\Services\AiEngineService', function ($c) {
+            $config = require __DIR__ . '/../../config/config.php';
+            return new \App\Services\AiEngineService(
+                $c->get('App\AI\MeteredAiProviderInterface'),
+                $c->get('App\AI\Prompts\PromptBuilder'),
+                $c->get('App\Services\TextExtractionService'),
+                $c->get('App\Repositories\AiJobRepository'),
+                $c->get('App\Repositories\AiJobStageRepository'),
+                $c->get('App\Repositories\AiGenerationLogRepository'),
+                $c->get('App\Repositories\AiContentRepository'),
+                $c->get('App\Repositories\FlashcardRepository'),
+                $c->get('App\Repositories\McqRepository'),
+                $c->get('App\Repositories\DrugTableRepository'),
+                $c->get('App\Repositories\DiseaseComparisonRepository'),
+                $c->get('App\Repositories\MnemonicRepository'),
+                $c->get('App\Repositories\VivaQuestionRepository'),
+                $c->get('App\Repositories\ClinicalCaseRepository'),
+                $c->get('App\Repositories\RevisionSheetRepository'),
+                $c->get('App\Repositories\VideoSimulationRepository'),
+                $c->get('App\Repositories\ContentRepository'),
+                $c->get('App\Services\NotificationService'),
+                (int) ($config['gemini']['max_input_chars'] ?? 100000)
             );
         });
 

@@ -1,4 +1,4 @@
-import { FiHome, FiUsers, FiUserCheck, FiBookOpen, FiCalendar } from 'react-icons/fi'
+import { FiHome, FiUsers, FiUserCheck, FiBookOpen, FiCalendar, FiZap } from 'react-icons/fi'
 import DashboardLayout from '../components/dashboard/DashboardLayout'
 
 const navItems = [
@@ -6,6 +6,7 @@ const navItems = [
   { to: '/admin/students', label: 'Students', icon: FiUsers },
   { to: '/admin/teachers', label: 'Teachers', icon: FiUserCheck },
   { to: '/admin/courses', label: 'Courses', icon: FiBookOpen },
+  { to: '/admin/ai-jobs', label: 'AI Engine', icon: FiZap },
   { to: '/admin/timetable', label: 'Timetable', icon: FiCalendar },
 ]
 

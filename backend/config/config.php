@@ -57,6 +57,48 @@ return [
         'max_input_chars' => (int) ($_ENV['AI_MAX_INPUT_CHARS'] ?? getenv('AI_MAX_INPUT_CHARS') ?: 6000),
     ],
 
+    // ── AI Study Planner (Groq) ────────────────────────────────
+    // Dedicated keys for the premium FCPS Study Planner module.
+    // Never hardcode secrets — read only from environment / .env.
+    'groq' => [
+        'api_key'     => $_ENV['GROQ_API_KEY'] ?? (getenv('GROQ_API_KEY') ?: ''),
+        'base_url'    => rtrim($_ENV['GROQ_BASE_URL'] ?? getenv('GROQ_BASE_URL') ?: 'https://api.groq.com/openai/v1', '/'),
+        'model'       => $_ENV['GROQ_MODEL'] ?? getenv('GROQ_MODEL') ?: 'openai/gpt-oss-20b',
+        'temperature' => (float) ($_ENV['GROQ_TEMPERATURE'] ?? getenv('GROQ_TEMPERATURE') ?: 0.5),
+        'max_tokens'  => (int) ($_ENV['GROQ_MAX_TOKENS'] ?? getenv('GROQ_MAX_TOKENS') ?: 4096),
+        'timeout'     => (int) ($_ENV['GROQ_TIMEOUT'] ?? getenv('GROQ_TIMEOUT') ?: 120),
+        'max_retries' => (int) ($_ENV['GROQ_MAX_RETRIES'] ?? getenv('GROQ_MAX_RETRIES') ?: 3),
+    ],
+
+    // ── AI Generation Engine (Gemini) ──────────────────────────
+    // Native Google Gemini options for the staged generation engine.
+    // The API key is NEVER hardcoded — it is read from the GEMINI_API_KEY
+    // environment variable / User Secrets / backend/.env only.
+    // Default model is Gemini 3.5 Flash (2.5 Flash is closed to new API keys).
+    // Switch via GEMINI_MODEL without touching business logic.
+    'gemini' => [
+        'api_key'           => $_ENV['GEMINI_API_KEY'] ?? (getenv('GEMINI_API_KEY') ?: ''),
+        'model'             => $_ENV['GEMINI_MODEL'] ?? getenv('GEMINI_MODEL') ?: 'gemini-3.5-flash',
+        'base_url'          => rtrim($_ENV['GEMINI_BASE_URL'] ?? getenv('GEMINI_BASE_URL') ?: 'https://generativelanguage.googleapis.com/v1beta', '/'),
+        'temperature'       => (float) ($_ENV['GEMINI_TEMPERATURE'] ?? getenv('GEMINI_TEMPERATURE') ?: 0.4),
+        'top_p'             => (float) ($_ENV['GEMINI_TOP_P'] ?? getenv('GEMINI_TOP_P') ?: 0.95),
+        'top_k'             => (int) ($_ENV['GEMINI_TOP_K'] ?? getenv('GEMINI_TOP_K') ?: 40),
+        'max_output_tokens' => (int) ($_ENV['GEMINI_MAX_OUTPUT_TOKENS'] ?? getenv('GEMINI_MAX_OUTPUT_TOKENS') ?: 8192),
+        'timeout'           => (int) ($_ENV['GEMINI_TIMEOUT'] ?? getenv('GEMINI_TIMEOUT') ?: 120),
+        'max_retries'       => (int) ($_ENV['GEMINI_MAX_RETRIES'] ?? getenv('GEMINI_MAX_RETRIES') ?: 3),
+        'max_input_chars'   => (int) ($_ENV['GEMINI_MAX_INPUT_CHARS'] ?? getenv('GEMINI_MAX_INPUT_CHARS') ?: 100000),
+        // USD per 1,000,000 tokens — used only for the admin cost estimate.
+        // Keyed by model prefix; falls back to the '*' default.
+        'pricing' => [
+            'gemini-3.5-flash' => ['input' => 0.30, 'output' => 2.50],
+            'gemini-3.1-flash' => ['input' => 0.15, 'output' => 0.60],
+            'gemini-2.5-flash' => ['input' => 0.30, 'output' => 2.50],
+            'gemini-2.5-pro'   => ['input' => 1.25, 'output' => 10.00],
+            'gemini-2.0-flash' => ['input' => 0.10, 'output' => 0.40],
+            '*'                => ['input' => 0.30, 'output' => 2.50],
+        ],
+    ],
+
     // Upload settings
     'uploads' => [
         'base_url' => getenv('UPLOAD_BASE_URL') ?: '/storage/uploads',

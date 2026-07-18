@@ -160,6 +160,51 @@ try {
             }
         }
 
+        if ($name === '013_ai_generation_engine.sql') {
+            $exists = (int) $pdo->query(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE()
+                   AND TABLE_NAME = 'ai_generation_jobs'
+                   AND COLUMN_NAME = 'engine'"
+            )->fetchColumn();
+            if ($exists) {
+                $pdo->prepare('INSERT IGNORE INTO schema_migrations (migration) VALUES (?)')->execute([$name]);
+                echo "[skip] {$name} (engine columns already exist)\n";
+                continue;
+            }
+        }
+
+        if ($name === '014_daily_challenge_quiz_bank.sql') {
+            // Ensure daily_challenge_sets columns for quiz-based challenges.
+            $cols = [
+                'question_source' => "ALTER TABLE daily_challenge_sets ADD COLUMN question_source ENUM('mcq','quiz') NOT NULL DEFAULT 'quiz' AFTER mcq_ids",
+                'quiz_question_ids' => "ALTER TABLE daily_challenge_sets ADD COLUMN quiz_question_ids JSON NULL AFTER question_source",
+                'correct_count' => "ALTER TABLE daily_challenge_sets ADD COLUMN correct_count SMALLINT UNSIGNED NULL AFTER quiz_question_ids",
+                'wrong_count' => "ALTER TABLE daily_challenge_sets ADD COLUMN wrong_count SMALLINT UNSIGNED NULL AFTER correct_count",
+                'score' => "ALTER TABLE daily_challenge_sets ADD COLUMN score DECIMAL(5,2) NULL AFTER wrong_count",
+                'time_spent_seconds' => "ALTER TABLE daily_challenge_sets ADD COLUMN time_spent_seconds INT UNSIGNED NULL AFTER score",
+            ];
+            foreach ($cols as $col => $alter) {
+                $exists = (int) $pdo->query(
+                    "SELECT COUNT(*) FROM information_schema.COLUMNS
+                     WHERE TABLE_SCHEMA = DATABASE()
+                       AND TABLE_NAME = 'daily_challenge_sets'
+                       AND COLUMN_NAME = " . $pdo->quote($col)
+                )->fetchColumn();
+                if (!$exists) {
+                    $pdo->exec($alter);
+                    echo "[alter] daily_challenge_sets.{$col}\n";
+                }
+            }
+            // Indexes (ignore if already present)
+            try {
+                $pdo->exec('CREATE INDEX idx_quizzes_status_course ON quizzes (status, course_id)');
+            } catch (PDOException $e) { /* exists */ }
+            try {
+                $pdo->exec('CREATE INDEX idx_quiz_questions_type ON quiz_questions (question_type)');
+            } catch (PDOException $e) { /* exists */ }
+        }
+
         $sql = file_get_contents($path);
         if ($sql === false || trim($sql) === '') {
             echo "[warn] {$name} is empty, skipping\n";

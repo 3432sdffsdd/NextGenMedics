@@ -1,50 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FiZap, FiTarget, FiBookOpen, FiAlertCircle, FiCalendar, FiRefreshCw, FiBell, FiBookmark, FiChevronDown, FiArchive, FiExternalLink } from 'react-icons/fi'
-import { premiumStudyService, dashboardService, myCoursesService, progressService, announcementsService, notificationsService } from '../../services/api'
+import { FiZap, FiTarget, FiBookOpen, FiAlertCircle, FiCalendar, FiRefreshCw, FiBell, FiExternalLink, FiPackage, FiFilm } from 'react-icons/fi'
+import { premiumStudyService, dashboardService, myCoursesService, progressService, notificationsService, studyMaterialService } from '../../services/api'
 import StatCard from '../../components/dashboard/StatCard'
 import StreakWidget from '../../components/dashboard/StreakWidget'
 import ProgressBar from '../../components/dashboard/ProgressBar'
 import McqPlayer from '../../components/dashboard/McqPlayer'
 import { useAuth } from '../../context/AuthContext'
-import { formatDateTime } from '../../utils/files'
 import { Badge } from '../../components/ui'
 import { notificationActionLabel, notificationHref, dedupeNotifications } from '../../utils/notificationLinks'
 
-const RECENT_ANNOUNCEMENT_LIMIT = 5
 const ACTIVITY_TYPES = new Set(['new_content', 'ai_content_published', 'new_quiz', 'new_assignment', 'assignment_graded'])
-
-function AnnouncementCard({ a }) {
-  return (
-    <article
-      className={`rounded-xl border p-4 ${a.is_pinned ? 'border-primary/30 bg-primary/5' : 'border-slate-100 bg-white'}`}
-    >
-      <div className="flex flex-wrap items-start gap-2">
-        {a.is_pinned && <FiBookmark className="mt-0.5 shrink-0 fill-primary text-primary" size={16} />}
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-semibold text-navy">{a.title}</h3>
-            {a.priority === 'urgent' && <Badge tone="danger">Urgent</Badge>}
-            {a.priority === 'high' && <Badge tone="warning">Important</Badge>}
-            {a.course_title && (
-              <span className="text-xs font-medium text-slate-500">
-                {a.course_id ? (
-                  <Link to={`/student/courses/${a.course_id}`} className="text-primary hover:underline">
-                    {a.course_title}
-                  </Link>
-                ) : a.course_title}
-              </span>
-            )}
-          </div>
-          <p className="mt-2 whitespace-pre-line text-sm text-slate-600">{a.content}</p>
-          <p className="mt-2 text-xs text-slate-400">
-            {a.author_name ? `${a.author_name} · ` : ''}{formatDateTime(a.published_at)}
-          </p>
-        </div>
-      </div>
-    </article>
-  )
-}
 
 function ActivityCard({ n, onOpened }) {
   const href = notificationHref(n, 'student')
@@ -93,22 +59,18 @@ export default function StudentDashboard() {
   const [revision, setRevision] = useState(null)
   const [revisionSummary, setRevisionSummary] = useState(null)
   const [startingRevision, setStartingRevision] = useState(false)
-  const [announcements, setAnnouncements] = useState([])
   const [activity, setActivity] = useState([])
-  const [showArchived, setShowArchived] = useState(false)
+  const [videoSummary, setVideoSummary] = useState({ total: 0, watched: 0 })
   const revisionStart = useRef(Date.now())
 
   useEffect(() => {
     dashboardService.student().then(({ data }) => setStats(data.data)).catch(() => {})
     myCoursesService.list().then(({ data }) => setCourses(data.data || [])).catch(() => {})
     premiumStudyService.dashboard().then(({ data }) => setPremium(data.data)).catch(() => {})
-    progressService.ping('login').catch(() => {})
-    announcementsService.list({ per_page: 50 })
-      .then(({ data }) => {
-        const rows = Array.isArray(data.data) ? data.data : (data.data?.items || [])
-        setAnnouncements(rows)
-      })
+    studyMaterialService.summary()
+      .then(({ data }) => setVideoSummary(data.data || { total: 0, watched: 0 }))
       .catch(() => {})
+    progressService.ping('login').catch(() => {})
     notificationsService.list({ per_page: 40 })
       .then(({ data }) => {
         const rows = Array.isArray(data.data) ? data.data : (data.data?.items || [])
@@ -117,9 +79,6 @@ export default function StudentDashboard() {
       })
       .catch(() => {})
   }, [])
-
-  const recentAnnouncements = announcements.slice(0, RECENT_ANNOUNCEMENT_LIMIT)
-  const archivedAnnouncements = announcements.slice(RECENT_ANNOUNCEMENT_LIMIT)
 
   const markActivityOpened = async (n) => {
     if (!n?.id || n.is_read) return
@@ -192,7 +151,7 @@ export default function StudentDashboard() {
             <p className="font-semibold text-amber-800">Remaining weak areas</p>
             <ul className="mt-2 space-y-1 text-sm text-amber-700">
               {revisionSummary.remaining_weak_areas.map((a) => (
-                <li key={a.subject}>{a.subject} — {a.accuracy}%</li>
+                <li key={a.topic || a.subject}>{a.topic || a.subject} — {a.accuracy}%</li>
               ))}
             </ul>
           </div>
@@ -206,61 +165,20 @@ export default function StudentDashboard() {
     <div>
       <p className="text-slate-500">Welcome, {user?.full_name}. Your personalized FCPS study hub.</p>
 
-      {(activity.length > 0 || announcements.length > 0) && (
+      {activity.length > 0 && (
         <section className="mt-6 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 via-white to-white p-5 shadow-soft">
-          {activity.length > 0 && (
-            <div className={announcements.length > 0 ? 'mb-6' : ''}>
-              <div className="flex items-center gap-2">
-                <FiBell className="text-emerald-600" size={20} />
-                <h2 className="font-display text-lg font-bold text-navy">New course updates</h2>
-              </div>
-              <p className="mt-1 text-sm text-slate-500">
-                Materials, quizzes, and assignments from your teachers — open them directly.
-              </p>
-              <div className="mt-3 space-y-2">
-                {activity.map((n) => (
-                  <ActivityCard key={n.id} n={n} onOpened={markActivityOpened} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {announcements.length > 0 && (
-            <>
-              <div className="flex items-center gap-2">
-                <FiBell className="text-primary" size={20} />
-                <h2 className="font-display text-lg font-bold text-navy">Announcements</h2>
-              </div>
-              <div className="mt-4 space-y-3">
-                {recentAnnouncements.map((a) => (
-                  <AnnouncementCard key={a.id} a={a} />
-                ))}
-              </div>
-
-              {archivedAnnouncements.length > 0 && (
-                <div className="mt-4 border-t border-slate-100 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowArchived((v) => !v)}
-                    className="flex w-full items-center justify-between rounded-xl border border-slate-100 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <FiArchive size={16} className="text-slate-400" />
-                      Archived ({archivedAnnouncements.length})
-                    </span>
-                    <FiChevronDown size={18} className={`text-slate-400 transition-transform ${showArchived ? 'rotate-180' : ''}`} />
-                  </button>
-                  {showArchived && (
-                    <div className="mt-3 space-y-3">
-                      {archivedAnnouncements.map((a) => (
-                        <AnnouncementCard key={a.id} a={a} />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
-          )}
+          <div className="flex items-center gap-2">
+            <FiBell className="text-emerald-600" size={20} />
+            <h2 className="font-display text-lg font-bold text-navy">New course updates</h2>
+          </div>
+          <p className="mt-1 text-sm text-slate-500">
+            Materials, quizzes, and assignments from your teachers — open them directly.
+          </p>
+          <div className="mt-3 space-y-2">
+            {activity.map((n) => (
+              <ActivityCard key={n.id} n={n} onOpened={markActivityOpened} />
+            ))}
+          </div>
         </section>
       )}
 
@@ -275,6 +193,35 @@ export default function StudentDashboard() {
       </button>
       <p className="mt-2 text-center text-xs text-slate-400">~20–30 min personalized session from weak topics, mistakes & flashcards</p>
 
+      <Link
+        to="/student/study-material"
+        className="mt-8 block rounded-2xl border border-slate-100 bg-white p-6 shadow-soft transition hover:border-primary/30 hover:shadow-md"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-500">
+              <FiFilm size={22} />
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase text-rose-500">Lecture Videos</p>
+              <h3 className="mt-1 font-bold text-navy">Video lecture progress</h3>
+              <p className="mt-1 text-sm text-slate-500">Mark videos watched as you complete them.</p>
+            </div>
+          </div>
+          <span className="text-xs font-semibold text-primary">Open →</span>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="rounded-xl bg-slate-50 px-4 py-3">
+            <p className="text-2xl font-bold text-navy">{videoSummary.total || 0}</p>
+            <p className="text-xs text-slate-500">Total video lectures uploaded</p>
+          </div>
+          <div className="rounded-xl bg-emerald-50 px-4 py-3">
+            <p className="text-2xl font-bold text-emerald-700">{videoSummary.watched || 0}</p>
+            <p className="text-xs text-slate-500">Total lecture videos watched</p>
+          </div>
+        </div>
+      </Link>
+
       <div className="mt-8 grid gap-5 lg:grid-cols-2">
         {/* Daily Challenge */}
         <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 to-white p-6 shadow-soft">
@@ -282,21 +229,21 @@ export default function StudentDashboard() {
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><FiZap size={22} /></div>
             <div className="flex-1">
               <p className="text-xs font-semibold uppercase text-primary">Daily Challenge</p>
+              <h3 className="mt-1 font-bold text-navy">Today&apos;s Challenge</h3>
               {daily?.completed ? (
                 <>
-                  <h3 className="mt-1 font-bold text-navy">Today's Challenge Completed</h3>
+                  <p className="mt-2 flex items-center gap-1 text-sm font-semibold text-green-600">✓ Completed Today</p>
                   {daily.last_score != null && <p className="text-sm text-green-600">Score: {Math.round(daily.last_score)}%</p>}
                   <p className="mt-2 text-sm text-slate-500">Next in <Countdown seconds={daily.seconds_until_next} /></p>
                 </>
               ) : daily?.available === false ? (
                 <>
-                  <h3 className="mt-1 font-bold text-navy">Not available yet</h3>
-                  <p className="mt-2 text-sm text-slate-500">{daily.message || 'Study Tools MCQs must be published by your teacher first.'}</p>
+                  <p className="mt-2 text-sm text-slate-500">{daily.message || 'Ask your teacher to publish course quizzes.'}</p>
                 </>
               ) : (
                 <>
-                  <h3 className="mt-1 font-bold text-navy">{daily?.total_questions || 10} MCQs · {daily?.duration_minutes || 10} min</h3>
-                  <Link to="/student/challenge" className="btn-primary mt-3 inline-block text-sm">Start challenge</Link>
+                  <p className="mt-1 text-sm text-slate-600">{daily?.total_questions || 10} Questions</p>
+                  <Link to="/student/challenge" className="btn-primary mt-3 inline-block text-sm">Start Challenge</Link>
                 </>
               )}
             </div>
@@ -304,28 +251,34 @@ export default function StudentDashboard() {
         </div>
 
         {/* Weak Areas */}
-        <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-soft">
-          <div className="flex items-center gap-2">
-            <FiTarget className="text-amber-500" />
-            <h3 className="font-bold text-navy">Weak Areas</h3>
+        <Link to="/student/weak-areas" className="block rounded-2xl border border-slate-100 bg-white p-6 shadow-soft transition hover:border-primary/30 hover:shadow-md">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <FiTarget className="text-amber-500" />
+              <h3 className="font-bold text-navy">Weak Areas</h3>
+            </div>
+            <span className="text-xs font-semibold text-primary">Open →</span>
           </div>
           {weak.length === 0 ? (
-            <p className="mt-4 text-sm text-slate-500">Answer more MCQs to unlock personalized weak-area analysis.</p>
+            <p className="mt-4 text-sm text-slate-500">Answer course quizzes or Daily Challenges to unlock topic-level weak-area analysis.</p>
           ) : (
             <ul className="mt-4 space-y-3">
-              {weak.slice(0, 4).map((a) => (
-                <li key={a.subject}>
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium text-navy">{a.subject}</span>
-                    <span className={a.accuracy < 70 ? 'text-red-500' : 'text-amber-600'}>{a.accuracy}%</span>
-                  </div>
-                  <ProgressBar value={a.accuracy} tone={a.accuracy < 70 ? 'rose' : 'amber'} className="mt-1" />
-                  <p className="mt-1 text-xs text-slate-500">{a.message}</p>
-                </li>
-              ))}
+              {weak.slice(0, 4).map((a) => {
+                const name = a.topic || a.subject
+                return (
+                  <li key={name}>
+                    <div className="flex justify-between text-sm">
+                      <span className="font-medium text-navy">{name}</span>
+                      <span className={a.accuracy < 70 ? 'text-red-500' : 'text-amber-600'}>{a.accuracy}%</span>
+                    </div>
+                    <ProgressBar value={a.accuracy} tone={a.accuracy < 70 ? 'rose' : 'amber'} className="mt-1" />
+                    <p className="mt-1 text-xs text-slate-500">{a.message}</p>
+                  </li>
+                )
+              })}
             </ul>
           )}
-        </div>
+        </Link>
 
         {/* Study Planner */}
         <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-soft">
@@ -361,7 +314,25 @@ export default function StudentDashboard() {
         </div>
       </div>
 
+      <div className="mt-6 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 to-white p-6 shadow-soft">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <FiPackage size={22} />
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase text-primary">Study Pack</p>
+              <h3 className="mt-1 font-bold text-navy">Summary · Mnemonics · Flashcards · Cases</h3>
+              <p className="mt-1 text-sm text-slate-500">Teacher-published revision material for your lectures.</p>
+            </div>
+          </div>
+          <Link to="/student/study-pack" className="btn-primary shrink-0 text-sm">Open Study Pack</Link>
+        </div>
+      </div>
+
       <div className="mt-6 flex flex-wrap gap-3">
+        <Link to="/student/study-material" className="btn-secondary text-sm"><FiFilm className="inline mr-1" /> Lecture Videos</Link>
+        <Link to="/student/study-pack" className="btn-secondary text-sm"><FiPackage className="inline mr-1" /> Study Pack</Link>
         <Link to="/student/question-bank" className="btn-secondary text-sm"><FiBookOpen className="inline mr-1" /> Question Bank</Link>
         <Link to="/student/planner" className="btn-secondary text-sm"><FiCalendar className="inline mr-1" /> Study Planner</Link>
         <Link to="/student/progress" className="btn-secondary text-sm">Performance Analytics</Link>

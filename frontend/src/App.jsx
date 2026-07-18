@@ -22,6 +22,7 @@ import AdminStudents from './pages/admin/AdminStudents'
 import AdminTeachers from './pages/admin/AdminTeachers'
 import AdminCourses from './pages/admin/AdminCourses'
 import AdminCourseForm from './pages/admin/AdminCourseForm'
+import AdminAiJobs from './pages/admin/AdminAiJobs'
 import TeacherDashboard from './pages/teacher/TeacherDashboard'
 import TeacherCourses from './pages/teacher/TeacherCourses'
 import TeacherCourseHub from './pages/teacher/TeacherCourseHub'
@@ -31,12 +32,15 @@ import StudentCourses from './pages/student/StudentCourses'
 import StudentCourseHub from './pages/student/StudentCourseHub'
 import StudentAssignments from './pages/student/StudentAssignments'
 import FlashcardCenter from './pages/student/FlashcardCenter'
-import RevisionCenter from './pages/student/RevisionCenter'
+import StudyPack from './pages/student/StudyPack'
 import DailyChallenge from './pages/student/DailyChallenge'
+import WeakAreas from './pages/student/WeakAreas'
 import StudentProgress from './pages/student/StudentProgress'
 import QuestionBank from './pages/student/QuestionBank'
 import MyMistakes from './pages/student/MyMistakes'
 import StudyPlanner from './pages/student/StudyPlanner'
+import FcpsStudyPlanner from './pages/student/FcpsStudyPlanner'
+import StudyMaterial from './pages/student/StudyMaterial'
 import TimetablePage from './pages/shared/TimetablePage'
 import FloatingWhatsApp from './components/common/FloatingWhatsApp'
 import NotFound from './pages/NotFound'
@@ -81,6 +85,7 @@ export default function App() {
               <Route path="courses" element={<AdminCourses />} />
               <Route path="courses/new" element={<AdminCourseForm />} />
               <Route path="courses/:id" element={<AdminCourseForm />} />
+              <Route path="ai-jobs" element={<AdminAiJobs />} />
               <Route path="timetable" element={<TimetablePage title="All Scheduled Classes" />} />
             </Route>
 
@@ -114,11 +119,15 @@ export default function App() {
               <Route path="courses" element={<StudentCourses />} />
               <Route path="courses/:id" element={<StudentCourseHub />} />
               <Route path="challenge" element={<DailyChallenge />} />
+              <Route path="weak-areas" element={<WeakAreas />} />
               <Route path="question-bank" element={<QuestionBank />} />
+              <Route path="study-material" element={<StudyMaterial />} />
               <Route path="mistakes" element={<MyMistakes />} />
               <Route path="planner" element={<StudyPlanner />} />
+              <Route path="fcps-planner" element={<FcpsStudyPlanner />} />
               <Route path="flashcards" element={<FlashcardCenter />} />
-              <Route path="revision" element={<RevisionCenter />} />
+              <Route path="revision" element={<Navigate to="/student/study-pack" replace />} />
+              <Route path="study-pack" element={<StudyPack />} />
               <Route path="progress" element={<StudentProgress />} />
               <Route path="assignments" element={<StudentAssignments />} />
               <Route path="timetable" element={<TimetablePage title="My Class Timetable" />} />
