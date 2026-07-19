@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { FiCheck, FiClock, FiLoader, FiPlay, FiRefreshCw, FiX, FiZap } from 'react-icons/fi'
-import { aiEngineService } from '../../services/api'
+import { FiCheck, FiClock, FiLoader, FiPlay, FiRefreshCw, FiUpload, FiX, FiZap } from 'react-icons/fi'
+import { aiEngineService, aiService } from '../../services/api'
 import { useToast } from '../../context/ToastContext'
 import Alert from './Alert'
 
@@ -78,6 +78,7 @@ const REVIEW_TABS = [
   { id: 'summary', label: 'Summary' },
   { id: 'mnemonics', label: 'Mnemonics' },
   { id: 'flashcards', label: 'Flashcards' },
+  { id: 'mcqs', label: 'MCQs' },
   { id: 'cases', label: 'Clinical Cases' },
 ]
 
@@ -95,7 +96,13 @@ export default function AiTutorPanel({ lectures = [] }) {
   const [pasteText, setPasteText] = useState('')
   const [showPaste, setShowPaste] = useState(false)
   const [running, setRunning] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [savingText, setSavingText] = useState(false)
+  const [manualSummary, setManualSummary] = useState('')
+  const [manualNotes, setManualNotes] = useState('')
   const pollRef = useRef(null)
+  const flashRef = useRef(null)
+  const mcqRef = useRef(null)
 
   useEffect(() => {
     if (lectures.length && !lectureId) setLectureId(lectures[0].id)
@@ -121,7 +128,11 @@ export default function AiTutorPanel({ lectures = [] }) {
   const loadReview = useCallback(async (id) => {
     if (!id) return
     const { data } = await aiEngineService.review(id)
-    setReview(data.data || null)
+    const pack = data.data || null
+    setReview(pack)
+    const c = pack?.content || {}
+    setManualSummary(c.summary || '')
+    setManualNotes(c.revision_notes || '')
   }, [])
 
   const loadJob = useCallback(async (id) => {
@@ -276,16 +287,76 @@ export default function AiTutorPanel({ lectures = [] }) {
     loadReview(lectureId)
   }
 
+  const uploadManual = async (kind, file) => {
+    if (!lectureId) {
+      toast.error('Select a lecture / topic first')
+      return
+    }
+    if (!file) return
+    const fd = new FormData()
+    fd.append('file', file)
+    setImporting(true)
+    try {
+      let res
+      if (kind === 'flashcards') res = await aiService.importFlashcards(lectureId, fd)
+      else res = await aiService.importMcqs(lectureId, fd)
+      const d = res.data?.data || {}
+      if (kind === 'flashcards') {
+        toast.success(`Imported ${d.flashcards_imported || 0} flashcards (published)`)
+      } else {
+        toast.success(`Imported ${d.mcqs_imported || 0} MCQs into Question Bank (published)`)
+      }
+      await loadReview(lectureId)
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Import failed')
+    } finally {
+      setImporting(false)
+      if (flashRef.current) flashRef.current.value = ''
+      if (mcqRef.current) mcqRef.current.value = ''
+    }
+  }
+
+  const saveManualText = async (andPublish = false) => {
+    if (!lectureId) {
+      toast.error('Select a lecture / topic first')
+      return
+    }
+    if (!manualSummary.trim() && !manualNotes.trim()) {
+      toast.error('Enter summary and/or notes first')
+      return
+    }
+    setSavingText(true)
+    try {
+      await aiService.updateContent(lectureId, {
+        summary: manualSummary,
+        revision_notes: manualNotes,
+      })
+      if (andPublish) {
+        await aiEngineService.approve(lectureId)
+        await aiEngineService.publish(lectureId)
+        toast.success('Summary & notes saved and published')
+      } else {
+        toast.success('Summary & notes saved')
+      }
+      await loadReview(lectureId)
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Could not save text')
+    } finally {
+      setSavingText(false)
+    }
+  }
+
   const content = review?.content || {}
-  const busy = running || job?.status === 'processing' || job?.status === 'pending'
+  const busy = running || job?.status === 'processing' || job?.status === 'pending' || importing || savingText
   const selected = lectures.find((l) => Number(l.id) === Number(lectureId))
+  const reviewMcqs = review?.mcqs || []
 
   return (
     <div className="space-y-6">
       <div>
         <h3 className="font-display text-xl font-bold text-navy">Study Tools</h3>
         <p className="mt-1 text-sm text-slate-500">
-          1) Select a lecture/topic · 2) Click <strong>Generate</strong> · 3) The system runs every step by itself and auto-retries errors · 4) Approve &amp; Publish
+          Use <strong>AI Generate</strong> and/or <strong>Manual</strong>: type summary &amp; notes, upload flashcards (Excel) and MCQs (file). MCQs go to the student Question Bank when published.
         </p>
       </div>
 
@@ -296,78 +367,177 @@ export default function AiTutorPanel({ lectures = [] }) {
       )}
 
       {lectures.length === 0 ? (
-        <Alert type="info">Add lectures under the Content tab first, then come back here to generate.</Alert>
+        <Alert type="info">Add lectures under the Content tab first, then come back here.</Alert>
       ) : (
-        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-soft">
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="block min-w-[240px] flex-1 text-sm">
-              <span className="mb-1 block font-semibold text-slate-700">1. Select lecture / topic</span>
-              <select
-                className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                value={lectureId}
-                onChange={(e) => setLectureId(Number(e.target.value))}
-                disabled={busy}
+        <>
+          <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-soft">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">Option A · AI</p>
+                <h4 className="font-display text-lg font-bold text-navy">AI Generate</h4>
+                <p className="text-xs text-slate-500">Summary, mnemonics, flashcards &amp; cases from lecture file (not MCQs).</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="block min-w-[240px] flex-1 text-sm">
+                <span className="mb-1 block font-semibold text-slate-700">Select lecture / topic</span>
+                <select
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                  value={lectureId}
+                  onChange={(e) => setLectureId(Number(e.target.value))}
+                  disabled={busy}
+                >
+                  {lectures.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.chapterTitle ? `${l.chapterTitle} — ` : ''}{l.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <button
+                type="button"
+                disabled={!status?.ready || !lectureId || busy}
+                onClick={start}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
               >
-                {lectures.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.chapterTitle ? `${l.chapterTitle} — ` : ''}{l.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <button
-              type="button"
-              disabled={!status?.ready || !lectureId || busy}
-              onClick={start}
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              <FiPlay /> 2. Generate
-            </button>
-
-            {job?.status === 'failed' && (
-              <button type="button" onClick={resume} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-navy">
-                <FiRefreshCw /> Resume now
+                <FiPlay /> Generate with AI
               </button>
+
+              {job?.status === 'failed' && (
+                <button type="button" onClick={resume} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-navy">
+                  <FiRefreshCw /> Resume now
+                </button>
+              )}
+              {busy && job?.id && !importing && !savingText && (
+                <button type="button" onClick={cancel} className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600">
+                  <FiX /> Cancel
+                </button>
+              )}
+            </div>
+
+            {selected && (
+              <p className="mt-3 text-xs text-slate-500">
+                Uses the PPT/PDF uploaded on this lecture in Content.
+                {!showPaste && (
+                  <>
+                    {' '}
+                    <button type="button" className="font-semibold text-primary hover:underline" onClick={() => setShowPaste(true)}>
+                      Or paste source text for AI
+                    </button>
+                  </>
+                )}
+              </p>
             )}
-            {busy && job?.id && (
-              <button type="button" onClick={cancel} className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600">
-                <FiX /> Cancel
-              </button>
+
+            {showPaste && (
+              <label className="mt-3 block text-sm">
+                <span className="mb-1 block font-medium text-slate-600">Paste lecture text for AI (optional)</span>
+                <textarea
+                  rows={5}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2"
+                  value={pasteText}
+                  onChange={(e) => setPasteText(e.target.value)}
+                  placeholder="Paste the lecture content here if there is no PPT/PDF yet…"
+                  disabled={busy}
+                />
+              </label>
             )}
           </div>
 
-          {selected && (
-            <p className="mt-3 text-xs text-slate-500">
-              Uses the PPT/PDF uploaded on this lecture in Content.
-              {!showPaste && (
-                <>
-                  {' '}
-                  <button type="button" className="font-semibold text-primary hover:underline" onClick={() => setShowPaste(true)}>
-                    Or paste text instead
-                  </button>
-                </>
-              )}
-            </p>
-          )}
+          <div className="rounded-2xl border border-dashed border-teal-200 bg-teal-50/40 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-teal-700">Option B · Manual</p>
+                <h4 className="font-display text-lg font-bold text-navy">Manual content</h4>
+                <p className="mt-1 text-sm text-slate-600">
+                  Type summary &amp; notes, upload flashcards from Excel, upload MCQs from a quiz file.
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-teal-700">
+                <FiUpload size={12} /> Manual
+              </span>
+            </div>
 
-          {showPaste && (
-            <label className="mt-3 block text-sm">
-              <span className="mb-1 block font-medium text-slate-600">Paste lecture text (optional)</span>
-              <textarea
-                rows={5}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2"
-                value={pasteText}
-                onChange={(e) => setPasteText(e.target.value)}
-                placeholder="Paste the lecture content here if there is no PPT/PDF yet…"
-                disabled={busy}
-              />
-            </label>
-          )}
-        </div>
+            <div className="mt-4 space-y-4 rounded-xl border border-white bg-white p-4 shadow-sm">
+              <label className="block text-sm">
+                <span className="mb-1 block font-semibold text-navy">Summary</span>
+                <textarea
+                  rows={8}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm leading-relaxed"
+                  value={manualSummary}
+                  onChange={(e) => setManualSummary(e.target.value)}
+                  placeholder="Type or paste the lecture summary here…"
+                  disabled={!lectureId || busy}
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="mb-1 block font-semibold text-navy">Notes</span>
+                <textarea
+                  rows={12}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm leading-relaxed"
+                  value={manualNotes}
+                  onChange={(e) => setManualNotes(e.target.value)}
+                  placeholder="Type or paste detailed notes / revision notes here…"
+                  disabled={!lectureId || busy}
+                />
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={!lectureId || busy}
+                  onClick={() => saveManualText(false)}
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-navy disabled:opacity-50"
+                >
+                  {savingText ? 'Saving…' : 'Save text'}
+                </button>
+                <button
+                  type="button"
+                  disabled={!lectureId || busy}
+                  onClick={() => saveManualText(true)}
+                  className="rounded-xl bg-navy px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  Save &amp; publish
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="block rounded-xl border border-white bg-white p-4 text-sm shadow-sm">
+                <span className="font-semibold text-navy">Flashcards from file</span>
+                <p className="mt-0.5 text-xs text-slate-500">Excel .xlsx / .xls — Column A = Front, B = Back. Published on upload.</p>
+                <input
+                  ref={flashRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  disabled={!lectureId || busy}
+                  className="mt-3 block w-full text-xs"
+                  onChange={(e) => uploadManual('flashcards', e.target.files?.[0])}
+                />
+              </label>
+              <label className="block rounded-xl border border-white bg-white p-4 text-sm shadow-sm">
+                <span className="font-semibold text-navy">MCQs from file</span>
+                <p className="mt-0.5 text-xs text-slate-500">Word / text / HTML quiz file. Goes to Question Bank when published.</p>
+                <input
+                  ref={mcqRef}
+                  type="file"
+                  accept=".doc,.docx,.txt,.html,.htm"
+                  disabled={!lectureId || busy}
+                  className="mt-3 block w-full text-xs"
+                  onChange={(e) => uploadManual('mcqs', e.target.files?.[0])}
+                />
+              </label>
+            </div>
+            {(importing || savingText) && (
+              <p className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-teal-700">
+                <FiLoader className="animate-spin" /> {savingText ? 'Saving…' : 'Uploading…'}
+              </p>
+            )}
+          </div>
+        </>
       )}
 
-      {job && <GenerationChecklist job={job} running={busy} />}
+      {job && <GenerationChecklist job={job} running={busy && !importing} />}
 
       {job?.status === 'completed' && (
         <Alert type="success" title="Generation complete">
@@ -428,6 +598,22 @@ export default function AiTutorPanel({ lectures = [] }) {
                   </li>
                 ))}
                 {!review.flashcards?.length && <p className="text-sm text-slate-400">No flashcards yet.</p>}
+              </ul>
+            )}
+            {tab === 'mcqs' && (
+              <ul className="max-h-96 space-y-2 overflow-y-auto">
+                {reviewMcqs.map((m, i) => (
+                  <li key={m.id || i} className="rounded-xl border border-slate-100 p-3 text-sm">
+                    <p className="font-medium text-navy">{i + 1}. {m.question}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {m.source === 'manual' ? 'Manual upload' : (m.source || 'Study Tools')}
+                      {m.status ? ` · ${m.status}` : ''}
+                    </p>
+                  </li>
+                ))}
+                {!reviewMcqs.length && (
+                  <p className="text-sm text-slate-400">No MCQs yet. Use Manual upload → MCQs only (or Word pack).</p>
+                )}
               </ul>
             )}
             {tab === 'cases' && (

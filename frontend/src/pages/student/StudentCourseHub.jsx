@@ -110,7 +110,15 @@ export default function StudentCourseHub() {
       })
 
     quizService.list(courseId)
-      .then(({ data }) => setQuizzes(data.data || []))
+      .then(({ data }) => {
+        const list = data.data || []
+        setQuizzes(list)
+        list.forEach((q) => {
+          quizService.myAttempts(q.id).then(({ data: att }) => {
+            setQuizAttempts((prev) => ({ ...prev, [q.id]: Array.isArray(att.data) ? att.data : [] }))
+          }).catch(() => {})
+        })
+      })
       .catch(() => setQuizzes([]))
 
     assignmentService.list(courseId)
@@ -123,11 +131,20 @@ export default function StudentCourseHub() {
       .finally(() => setLoading(false))
   }, [courseId, toast])
 
-  const loadQuizAttempts = useCallback((quizId) => {
-    quizService.myAttempts(quizId).then(({ data }) => {
-      setQuizAttempts((prev) => ({ ...prev, [quizId]: data.data || [] }))
-    }).catch(() => {})
-  }, [])
+  const loadQuizAttempts = useCallback((quizId, { silent = true } = {}) => {
+    return quizService.myAttempts(quizId).then(({ data }) => {
+      const list = Array.isArray(data.data) ? data.data : []
+      setQuizAttempts((prev) => ({ ...prev, [quizId]: list }))
+      if (!silent && list.length === 0) {
+        toast.info('No past attempts for this quiz yet')
+      }
+      return list
+    }).catch((err) => {
+      setQuizAttempts((prev) => ({ ...prev, [quizId]: prev[quizId] || [] }))
+      if (!silent) toast.error(err.response?.data?.message || 'Could not load past attempts')
+      return []
+    })
+  }, [toast])
 
   const startQuiz = async (quizId) => {
     setQuizResult(null)
@@ -162,18 +179,23 @@ export default function StudentCourseHub() {
   const reviewPastAttempt = async (attemptId, title) => {
     try {
       const { data } = await quizService.reviewAttempt(attemptId)
+      const payload = data.data
+      if (!payload?.attempt) {
+        toast.error('Could not load review')
+        return
+      }
       setQuizResult({
-        percentage: data.data.attempt.percentage,
-        score: data.data.attempt.score,
-        passed: !!data.data.attempt.passed,
-        review: data.data.review,
-        title: title || data.data.quiz?.title,
-        time_taken_seconds: data.data.attempt.time_taken_seconds,
-        submitted_at: data.data.attempt.submitted_at,
+        percentage: payload.attempt.percentage,
+        score: payload.attempt.score,
+        passed: !!payload.attempt.passed,
+        review: Array.isArray(payload.review) ? payload.review : null,
+        title: title || payload.quiz?.title,
+        time_taken_seconds: payload.attempt.time_taken_seconds,
+        submitted_at: payload.attempt.submitted_at,
       })
       setActiveQuiz(null)
-    } catch {
-      toast.error('Could not load review')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not load review')
     }
   }
 
@@ -304,18 +326,26 @@ export default function StudentCourseHub() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {!atMax && <button type="button" onClick={() => startQuiz(q.id)} className="btn-primary text-sm">Start Quiz</button>}
-                    <button type="button" onClick={() => loadQuizAttempts(q.id)} className="btn-secondary text-sm">Past attempts</button>
+                    {atMax && <span className="self-center text-xs font-semibold text-slate-400">All attempts used</span>}
+                    <button type="button" onClick={() => loadQuizAttempts(q.id, { silent: false })} className="btn-secondary text-sm">Past attempts</button>
                   </div>
                 </div>
-                {attempts?.length > 0 && (
-                  <ul className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-sm">
-                    {attempts.map((a) => (
-                      <li key={a.id} className="flex items-center justify-between gap-2">
-                        <span className="text-slate-500">Attempt {a.attempt_number} · {a.percentage ?? a.score}% · {a.passed ? 'Passed' : 'Failed'}</span>
-                        <button type="button" onClick={() => reviewPastAttempt(a.id, q.title)} className="text-xs font-semibold text-primary hover:underline">Review answers</button>
-                      </li>
-                    ))}
-                  </ul>
+                {attempts !== undefined && (
+                  attempts.length > 0 ? (
+                    <ul className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-sm">
+                      {attempts.map((a) => (
+                        <li key={a.id} className="flex items-center justify-between gap-2">
+                          <span className="text-slate-500">
+                            Attempt {a.attempt_number} · {a.percentage ?? a.score ?? '—'}% · {a.passed ? 'Passed' : 'Failed'}
+                            {a.submitted_at ? ` · ${new Date(a.submitted_at).toLocaleDateString()}` : ''}
+                          </span>
+                          <button type="button" onClick={() => reviewPastAttempt(a.id, q.title)} className="text-xs font-semibold text-primary hover:underline">Review answers</button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-400">No past attempts yet.</p>
+                  )
                 )}
               </div>
             )

@@ -114,8 +114,11 @@ class QuizQuestionBankRepository extends BaseRepository
         $opts->execute([(int) $row['id']]);
         $options = array_slice($opts->fetchAll(), 0, 5);
 
+        $qid = (int) $row['id'];
         $q = [
-            'id'           => (int) $row['id'],
+            'id'           => $qid,
+            'raw_id'       => $qid,
+            'bank_id'      => 'quiz-' . $qid,
             'question'     => (string) $row['question_text'],
             'explanation'  => $row['explanation'] ?? null,
             'topic'        => $row['quiz_title'] ?? null,

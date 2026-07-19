@@ -83,7 +83,7 @@ class AiGenerationService
                 'summary'    => $this->stepSummary($job),
                 'notes'      => $this->stepNotes($job),
                 'flashcards' => $this->stepFlashcards($job),
-                'mcqs'       => $this->stepMcqs($job),
+                'mcqs'       => $this->skipMcqs($job),
                 default      => $this->finish($job),
             };
         } catch (\Throwable $e) {
@@ -176,43 +176,15 @@ class AiGenerationService
 
     private function advanceAfterFlashcards(array $job): void
     {
-        $opts = $job['options'] ?? [];
-        $next = ((int) ($opts['mcqs'] ?? 0)) > 0 ? 'mcqs' : 'done';
-        $this->jobs->update((int) $job['id'], ['current_step' => $next, 'progress' => 68]);
+        // Skip AI MCQ generation — teachers upload MCQs manually.
+        $this->jobs->update((int) $job['id'], ['current_step' => 'done', 'progress' => 68]);
+        $this->finish($job);
     }
 
-    private function stepMcqs(array $job): void
+    /** Legacy jobs that still land on the MCQ step: finish without generating. */
+    private function skipMcqs(array $job): void
     {
-        $target = (int) $job['mcq_target'];
-        $done   = (int) $job['mcq_done'];
-        $remaining = $target - $done;
-
-        if ($remaining <= 0) {
-            $this->finish($job);
-            return;
-        }
-
-        $batch = min(self::MCQ_BATCH, $remaining);
-        $existing = $this->mcqs->existingQuestions((int) $job['lecture_id']);
-        $context = $this->contextForFlashcardsAndMcqs($job);
-        $questions = $this->ai->generateMcqs($context, $batch, $existing);
-        $inserted = $this->mcqs->insertMany(
-            (int) $job['lecture_id'], $job['course_id'] ? (int) $job['course_id'] : null,
-            $job['requested_by'] ? (int) $job['requested_by'] : null, $questions
-        );
-
-        $newDone = min($done + max($inserted, 1), $target);
-        $progress = 68 + (int) (31 * $newDone / max($target, 1));
-
-        $this->jobs->update((int) $job['id'], [
-            'mcq_done' => $newDone,
-            'progress' => min($progress, 99),
-        ]);
-
-        if ($newDone >= $target || $inserted === 0) {
-            $job['mcq_done'] = $target;
-            $this->finish($job);
-        }
+        $this->finish($job);
     }
 
     private function finish(array $job): void

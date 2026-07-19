@@ -4,6 +4,10 @@ import Alert from './Alert'
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E']
 
+function qKey(q) {
+  return String(q?.bank_id || q?.id || '')
+}
+
 function formatTime(seconds) {
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
@@ -59,7 +63,10 @@ export default function McqPlayer({
 
   const reviewById = useMemo(() => {
     const map = {}
-    ;(result?.review || []).forEach((r) => { map[r.mcq_id] = r })
+    ;(result?.review || []).forEach((r) => {
+      map[r.mcq_id] = r
+      if (r.bank_id) map[r.bank_id] = r
+    })
     return map
   }, [result])
 
@@ -76,7 +83,17 @@ export default function McqPlayer({
         challenge_day: challengeDay,
         daily_set_id: dailySetId,
         time_spent_seconds: timeSpent,
-        answers: questions.map((q) => ({ mcq_id: q.id, selected_option: answers[q.id] || null })),
+        answers: questions.map((q) => {
+          const key = qKey(q)
+          const rawId = q.raw_id != null ? q.raw_id : (typeof q.id === 'number' ? q.id : null)
+          return {
+            mcq_id: rawId ?? key,
+            raw_id: rawId,
+            bank_id: q.bank_id || key,
+            source_type: q.source_type || (String(key).startsWith('study-') ? 'study' : 'quiz'),
+            selected_option: answers[key] || null,
+          }
+        }),
       }
       let data
       if (source === 'daily') {
@@ -129,19 +146,21 @@ export default function McqPlayer({
       </div>
 
       <div className="space-y-4">
-        {questions.map((q, i) => (
-          <div key={q.id} className="rounded-2xl border border-slate-100 bg-white p-5 shadow-soft">
+        {questions.map((q, i) => {
+          const key = qKey(q)
+          return (
+          <div key={key} className="rounded-2xl border border-slate-100 bg-white p-5 shadow-soft">
             <div className="flex items-start gap-2">
               <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">{i + 1}</span>
               <p className="font-medium text-navy">{q.question}</p>
             </div>
             <div className="mt-3 space-y-2">
               {optionsFor(q).map((l) => {
-                const active = answers[q.id] === l
+                const active = answers[key] === l
                 return (
                   <label key={l} className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-2.5 text-sm transition ${active ? 'border-primary bg-primary/5 text-navy' : 'border-slate-200 hover:bg-slate-50'}`}>
-                    <input type="radio" name={`q-${q.id}`} className="accent-primary" checked={active}
-                      onChange={() => setAnswers((prev) => ({ ...prev, [q.id]: l }))} />
+                    <input type="radio" name={`q-${key}`} className="accent-primary" checked={active}
+                      onChange={() => setAnswers((prev) => ({ ...prev, [key]: l }))} />
                     <span className="font-semibold text-slate-500">{l}.</span>
                     <span>{q[`option_${l.toLowerCase()}`]}</span>
                   </label>
@@ -149,7 +168,8 @@ export default function McqPlayer({
               })}
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
 
       <div className="sticky bottom-4 flex items-center justify-between rounded-2xl border border-slate-100 bg-white/90 p-4 shadow-soft backdrop-blur">
@@ -197,10 +217,15 @@ function McqResult({ result, questions, reviewById, title, onClose }) {
 
       <div className="space-y-4">
         {questions.map((q, i) => {
-          const r = reviewById[q.id]
+          const key = qKey(q)
+          const r = reviewById[key]
+            || reviewById[q.bank_id]
+            || reviewById[q.id]
+            || reviewById[q.raw_id]
+            || reviewById[`quiz-${q.raw_id || q.id}`]
           if (!r) return null
           return (
-            <div key={q.id} className="rounded-2xl border border-slate-100 bg-white p-5 shadow-soft">
+            <div key={key} className="rounded-2xl border border-slate-100 bg-white p-5 shadow-soft">
               <div className="flex items-start gap-2">
                 <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${r.is_correct ? 'bg-green-500' : 'bg-red-500'}`}>{r.is_correct ? '✓' : '✕'}</span>
                 <p className="font-medium text-navy">{i + 1}. {r.question}</p>

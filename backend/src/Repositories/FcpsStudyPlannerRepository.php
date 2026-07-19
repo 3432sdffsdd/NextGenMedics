@@ -352,6 +352,50 @@ class FcpsStudyPlannerRepository extends BaseRepository
             ->execute([$pct, $streak, $planId]);
     }
 
+    public function updateExamDate(int $planId, ?string $examDate): void
+    {
+        $this->db->prepare('UPDATE fcps_study_plans SET exam_date = ? WHERE id = ?')
+            ->execute([$examDate, $planId]);
+    }
+
+    public function updateDay(int $dayId, int $planId, array $fields): void
+    {
+        $allowed = [
+            'topics', 'mcq_target', 'flashcard_target', 'revision_subject',
+            'notes', 'is_study_day', 'weekly_goal', 'day_status',
+        ];
+        $sets = [];
+        $vals = [];
+        foreach ($allowed as $key) {
+            if (!array_key_exists($key, $fields)) {
+                continue;
+            }
+            $sets[] = "{$key} = ?";
+            $val = $fields[$key];
+            if ($key === 'topics') {
+                $val = json_encode(is_array($val) ? array_values($val) : []);
+            } elseif ($key === 'is_study_day') {
+                $val = $val ? 1 : 0;
+            }
+            $vals[] = $val;
+        }
+        if (!$sets) {
+            return;
+        }
+        $vals[] = $dayId;
+        $vals[] = $planId;
+        $this->db->prepare(
+            'UPDATE fcps_study_plan_days SET ' . implode(', ', $sets) . ' WHERE id = ? AND plan_id = ?'
+        )->execute($vals);
+    }
+
+    public function updateTaskTargetsForDay(int $dayId, string $taskType, int $targetCount): void
+    {
+        $this->db->prepare(
+            'UPDATE fcps_study_tasks SET target_count = ? WHERE day_id = ? AND task_type = ?'
+        )->execute([$targetCount, $dayId, $taskType]);
+    }
+
     public function upsertDailyStat(int $planId, int $studentId, string $date, array $stats): void
     {
         $this->db->prepare(

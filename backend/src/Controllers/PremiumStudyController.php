@@ -30,7 +30,11 @@ class PremiumStudyController extends BaseController
 
     public function dailyChallenge(Request $request): void
     {
-        Response::success($this->premium->buildDailyChallenge($request->userId()));
+        try {
+            Response::success($this->premium->buildDailyChallenge($request->userId()));
+        } catch (\Throwable $e) {
+            Response::error('Daily challenge error: ' . $e->getMessage(), 500);
+        }
     }
 
     public function dailyHistory(Request $request): void

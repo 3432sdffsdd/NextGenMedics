@@ -109,11 +109,42 @@ class StudentQuestionHistoryRepository extends BaseRepository
         if ($selectedJson === null || $selectedJson === '') {
             return null;
         }
-        $ids = is_string($selectedJson) ? (json_decode($selectedJson, true) ?: []) : (array) $selectedJson;
+        if (is_string($selectedJson) && preg_match('/^[A-Ea-e]$/', trim($selectedJson))) {
+            return strtoupper(trim($selectedJson));
+        }
+        $ids = $selectedJson;
+        if (is_string($selectedJson)) {
+            $decoded = json_decode($selectedJson, true);
+            if ($decoded === null && is_numeric(trim($selectedJson))) {
+                $ids = [(int) trim($selectedJson)];
+            } elseif (is_array($decoded)) {
+                $ids = $decoded;
+            } elseif (is_int($decoded) || is_float($decoded)) {
+                $ids = [(int) $decoded];
+            } else {
+                $ids = [];
+            }
+        } elseif (is_int($selectedJson) || is_float($selectedJson)) {
+            $ids = [(int) $selectedJson];
+        } elseif (!is_array($selectedJson)) {
+            $ids = [];
+        }
         if (!$ids) {
             return null;
         }
-        $selectedId = (int) $ids[0];
+        $selectedId = 0;
+        foreach ($ids as $v) {
+            if (is_numeric($v)) {
+                $selectedId = (int) $v;
+                break;
+            }
+            if (is_string($v) && preg_match('/^[A-Ea-e]$/', trim($v))) {
+                return strtoupper(trim($v));
+            }
+        }
+        if ($selectedId <= 0) {
+            return null;
+        }
         $opts = $this->db->prepare(
             'SELECT id FROM quiz_question_options WHERE question_id = ? ORDER BY sort_order, id LIMIT 5'
         );
@@ -164,6 +195,20 @@ class StudentQuestionHistoryRepository extends BaseRepository
     {
         $stmt = $this->db->prepare(
             'SELECT COUNT(*) FROM student_question_history WHERE student_id = ? AND is_correct = 1'
+        );
+        $stmt->execute([$studentId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * Mistakes later answered correctly in Practice My Mistakes / Weak Areas.
+     * (Excludes first-try correct quiz answers — those are not "mastered mistakes".)
+     */
+    public function countMasteredMistakes(int $studentId): int
+    {
+        $stmt = $this->db->prepare(
+            "SELECT COUNT(*) FROM student_question_history
+             WHERE student_id = ? AND is_correct = 1 AND source IN ('weak', 'practice')"
         );
         $stmt->execute([$studentId]);
         return (int) $stmt->fetchColumn();

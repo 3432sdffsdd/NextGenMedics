@@ -22,19 +22,23 @@ class StudyMaterialController extends BaseController
 
     public function list(Request $request): void
     {
-        $studentId = $request->userId();
-        $courseIds = array_column($this->courses->listByStudent($studentId), 'id');
-        $filters = [
-            'course_id'    => $request->query('course_id'),
-            'topic'        => $request->query('topic'),
-            'lecture_id'   => $request->query('lecture_id'),
-            'watch_status' => $request->query('watch_status'),
-        ];
-        Response::success([
-            'summary' => $this->watches->summaryForStudent($studentId, $courseIds),
-            'topics'  => $this->watches->topicsForStudent($courseIds),
-            'videos'  => $this->watches->listVideos($studentId, $courseIds, $filters),
-        ]);
+        try {
+            $studentId = $request->userId();
+            $courseIds = array_column($this->courses->listByStudent($studentId), 'id');
+            $filters = [
+                'course_id'    => $request->query('course_id'),
+                'topic'        => $request->query('topic'),
+                'lecture_id'   => $request->query('lecture_id'),
+                'watch_status' => $request->query('watch_status'),
+            ];
+            Response::success([
+                'summary' => $this->watches->summaryForStudent($studentId, $courseIds),
+                'topics'  => $this->watches->topicsForStudent($courseIds),
+                'videos'  => $this->watches->listVideos($studentId, $courseIds, $filters),
+            ]);
+        } catch (\Throwable $e) {
+            Response::error('Lecture videos error: ' . $e->getMessage(), 500);
+        }
     }
 
     public function toggleWatch(Request $request): void

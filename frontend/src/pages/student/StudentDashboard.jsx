@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FiZap, FiTarget, FiBookOpen, FiAlertCircle, FiCalendar, FiRefreshCw, FiBell, FiExternalLink, FiPackage, FiFilm } from 'react-icons/fi'
+import { FiZap, FiTarget, FiBookOpen, FiAlertCircle, FiCalendar, FiBell, FiExternalLink, FiPackage, FiFilm } from 'react-icons/fi'
 import { premiumStudyService, dashboardService, myCoursesService, progressService, notificationsService, studyMaterialService } from '../../services/api'
 import StatCard from '../../components/dashboard/StatCard'
 import StreakWidget from '../../components/dashboard/StreakWidget'
 import ProgressBar from '../../components/dashboard/ProgressBar'
-import McqPlayer from '../../components/dashboard/McqPlayer'
 import { useAuth } from '../../context/AuthContext'
 import { Badge } from '../../components/ui'
 import { notificationActionLabel, notificationHref, dedupeNotifications } from '../../utils/notificationLinks'
@@ -56,12 +55,8 @@ export default function StudentDashboard() {
   const [stats, setStats] = useState(null)
   const [courses, setCourses] = useState([])
   const [premium, setPremium] = useState(null)
-  const [revision, setRevision] = useState(null)
-  const [revisionSummary, setRevisionSummary] = useState(null)
-  const [startingRevision, setStartingRevision] = useState(false)
   const [activity, setActivity] = useState([])
   const [videoSummary, setVideoSummary] = useState({ total: 0, watched: 0 })
-  const revisionStart = useRef(Date.now())
 
   useEffect(() => {
     dashboardService.student().then(({ data }) => setStats(data.data)).catch(() => {})
@@ -88,31 +83,6 @@ export default function StudentDashboard() {
     } catch { /* ignore */ }
   }
 
-  const startRevision = async () => {
-    setStartingRevision(true)
-    revisionStart.current = Date.now()
-    try {
-      const { data } = await premiumStudyService.startRevision()
-      setRevision(data.data)
-    } finally {
-      setStartingRevision(false)
-    }
-  }
-
-  const finishRevision = async (mcqResult) => {
-    if (!revision?.session_id) return
-    const duration = Math.round((Date.now() - revisionStart.current) / 1000)
-    const { data } = await premiumStudyService.completeRevision(revision.session_id, {
-      duration_seconds: duration,
-      mcqs_solved: mcqResult?.total || 0,
-      mcqs_correct: mcqResult?.correct || 0,
-      topics_revised: (revision.flashcards || []).map((f) => f.topic).filter(Boolean),
-    })
-    setRevisionSummary(data.data)
-    setRevision(null)
-    premiumStudyService.dashboard().then(({ data: d }) => setPremium(d.data)).catch(() => {})
-  }
-
   const totalPresent = courses.reduce((sum, c) => sum + (c.attendance_present || 0), 0)
   const totalSessions = courses.reduce((sum, c) => sum + (c.attendance_total || 0), 0)
   const overallAttendance = totalSessions > 0 ? Math.round((totalPresent / totalSessions) * 100) : null
@@ -121,45 +91,6 @@ export default function StudentDashboard() {
   const mistakes = premium?.mistakes || {}
   const weekly = premium?.recent_performance?.weekly || []
   const overall = premium?.recent_performance?.overall || {}
-
-  if (revision?.mcqs?.length) {
-    return (
-      <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-soft">
-        <McqPlayer
-          questions={revision.mcqs}
-          source="revision"
-          title="Smart Revision Session"
-          onClose={() => setRevision(null)}
-          onFinished={finishRevision}
-        />
-      </div>
-    )
-  }
-
-  if (revisionSummary) {
-    return (
-      <div className="space-y-6">
-        <h2 className="font-display text-2xl font-bold text-navy">Revision Complete</h2>
-        <div className="grid gap-4 sm:grid-cols-4">
-          <StatCard label="MCQs Solved" value={revisionSummary.mcqs_solved} icon={FiTarget} />
-          <StatCard label="Accuracy" value={`${Math.round(revisionSummary.accuracy)}%`} icon={FiTarget} tone="emerald" />
-          <StatCard label="Time Spent" value={`${Math.floor(revisionSummary.duration_seconds / 60)}m`} icon={FiCalendar} />
-          <StatCard label="Topics" value={(revisionSummary.topics_revised || []).length} icon={FiBookOpen} />
-        </div>
-        {revisionSummary.remaining_weak_areas?.length > 0 && (
-          <div className="rounded-2xl border border-amber-100 bg-amber-50 p-5">
-            <p className="font-semibold text-amber-800">Remaining weak areas</p>
-            <ul className="mt-2 space-y-1 text-sm text-amber-700">
-              {revisionSummary.remaining_weak_areas.map((a) => (
-                <li key={a.topic || a.subject}>{a.topic || a.subject} — {a.accuracy}%</li>
-              ))}
-            </ul>
-          </div>
-        )}
-        <button type="button" onClick={() => setRevisionSummary(null)} className="btn-primary text-sm">Back to dashboard</button>
-      </div>
-    )
-  }
 
   return (
     <div>
@@ -182,20 +113,9 @@ export default function StudentDashboard() {
         </section>
       )}
 
-      <button
-        type="button"
-        onClick={startRevision}
-        disabled={startingRevision}
-        className="mt-6 flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-primary to-primary-dark px-8 py-5 text-lg font-bold text-white shadow-lg transition hover:opacity-95 disabled:opacity-60"
-      >
-        <FiRefreshCw className={startingRevision ? 'animate-spin' : ''} size={24} />
-        {startingRevision ? 'Preparing session…' : 'Revise Today'}
-      </button>
-      <p className="mt-2 text-center text-xs text-slate-400">~20–30 min personalized session from weak topics, mistakes & flashcards</p>
-
       <Link
         to="/student/study-material"
-        className="mt-8 block rounded-2xl border border-slate-100 bg-white p-6 shadow-soft transition hover:border-primary/30 hover:shadow-md"
+        className="mt-6 block rounded-2xl border border-slate-100 bg-white p-6 shadow-soft transition hover:border-primary/30 hover:shadow-md"
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-4">
@@ -280,26 +200,6 @@ export default function StudentDashboard() {
           )}
         </Link>
 
-        {/* Study Planner */}
-        <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-soft">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2"><FiCalendar className="text-primary" /><h3 className="font-bold text-navy">Study Planner</h3></div>
-            <Link to="/student/planner" className="text-xs font-semibold text-primary hover:underline">Open →</Link>
-          </div>
-          {premium?.study_plan?.today_tasks?.length ? (
-            <ul className="mt-4 space-y-2">
-              {premium.study_plan.today_tasks.slice(0, 4).map((t) => (
-                <li key={t.id} className="flex items-center gap-2 text-sm text-slate-600">
-                  <span className={`h-2 w-2 rounded-full ${t.status === 'completed' ? 'bg-green-500' : 'bg-slate-300'}`} />
-                  {t.title}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-4 text-sm text-slate-500">Set your exam date to get a daily study plan.</p>
-          )}
-        </div>
-
         {/* My Mistakes */}
         <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-soft">
           <div className="flex items-center justify-between">
@@ -307,10 +207,11 @@ export default function StudentDashboard() {
             <Link to="/student/mistakes" className="text-xs font-semibold text-primary hover:underline">View all →</Link>
           </div>
           <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-            <div><p className="text-2xl font-bold text-navy">{mistakes.total || 0}</p><p className="text-xs text-slate-400">Total</p></div>
-            <div><p className="text-2xl font-bold text-red-500">{mistakes.remaining || 0}</p><p className="text-xs text-slate-400">Remaining</p></div>
-            <div><p className="text-2xl font-bold text-green-600">{mistakes.mastered || 0}</p><p className="text-xs text-slate-400">Mastered</p></div>
+            <div><p className="text-2xl font-bold text-navy">{mistakes.total ?? 0}</p><p className="text-xs text-slate-400">Total</p></div>
+            <div><p className="text-2xl font-bold text-red-500">{mistakes.remaining ?? 0}</p><p className="text-xs text-slate-400">Remaining</p></div>
+            <div><p className="text-2xl font-bold text-green-600">{mistakes.mastered ?? 0}</p><p className="text-xs text-slate-400">Mastered</p></div>
           </div>
+          <p className="mt-3 text-center text-[11px] text-slate-400">Wrong answers from quizzes &amp; challenges</p>
         </div>
       </div>
 
@@ -332,9 +233,9 @@ export default function StudentDashboard() {
 
       <div className="mt-6 flex flex-wrap gap-3">
         <Link to="/student/study-material" className="btn-secondary text-sm"><FiFilm className="inline mr-1" /> Lecture Videos</Link>
+        <Link to="/student/video-progress" className="btn-secondary text-sm"><FiFilm className="inline mr-1" /> Video Progress</Link>
         <Link to="/student/study-pack" className="btn-secondary text-sm"><FiPackage className="inline mr-1" /> Study Pack</Link>
         <Link to="/student/question-bank" className="btn-secondary text-sm"><FiBookOpen className="inline mr-1" /> Question Bank</Link>
-        <Link to="/student/planner" className="btn-secondary text-sm"><FiCalendar className="inline mr-1" /> Study Planner</Link>
         <Link to="/student/progress" className="btn-secondary text-sm">Performance Analytics</Link>
       </div>
 

@@ -382,11 +382,20 @@ class QuizController extends BaseController
                     array_filter($options, fn($o) => $o['is_correct']),
                     'id'
                 ));
+                $selected = $row['selected_option_ids'];
+                if (is_string($selected)) {
+                    $selected = json_decode($selected, true);
+                }
+                if (!is_array($selected)) {
+                    $selected = [];
+                }
+                $selected = array_values(array_map('intval', $selected));
+
                 $review[] = [
                     'question_id'   => (int) $row['question_id'],
                     'question_text' => $row['question_text'],
                     'explanation'   => $row['explanation'],
-                    'selected'      => $row['selected_option_ids'],
+                    'selected'      => $selected,
                     'text_answer'   => $row['text_answer'],
                     'is_correct'    => $row['is_correct'] !== null ? (bool) $row['is_correct'] : null,
                     'marks_awarded' => $row['marks_awarded'],

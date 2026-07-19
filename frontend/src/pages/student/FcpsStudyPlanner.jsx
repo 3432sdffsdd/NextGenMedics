@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   FiCalendar, FiCheck, FiZap, FiTarget, FiBookOpen, FiRefreshCw, FiPrinter,
-  FiDownload, FiTrash2, FiClock, FiTrendingUp, FiSearch, FiAward, FiSkipForward,
+  FiDownload, FiTrash2, FiClock, FiTrendingUp, FiSearch, FiAward, FiSkipForward, FiEdit2,
 } from 'react-icons/fi'
 import { fcpsStudyPlannerService } from '../../services/api'
 import { useToast } from '../../context/ToastContext'
@@ -72,6 +72,10 @@ export default function FcpsStudyPlanner() {
   const [searchQ, setSearchQ] = useState('')
   const [searchItems, setSearchItems] = useState([])
   const [note, setNote] = useState('')
+  const [examEditOpen, setExamEditOpen] = useState(false)
+  const [examDateDraft, setExamDateDraft] = useState('')
+  const [dayEdit, setDayEdit] = useState(null)
+  const [savingDay, setSavingDay] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -168,8 +172,74 @@ export default function FcpsStudyPlanner() {
 
   const openDay = async (date) => {
     const { data } = await fcpsStudyPlannerService.day(date)
-    setDayModal(data.data)
+    const detail = data.data
+    setDayModal(detail)
     setRescheduleId(null)
+    const d = detail?.day
+    setDayEdit(d ? {
+      topics: (d.topics || []).join(', '),
+      mcq_target: d.mcq_target ?? 0,
+      flashcard_target: d.flashcard_target ?? 0,
+      revision_subject: d.revision_subject || '',
+      notes: d.notes || '',
+      is_study_day: !!d.is_study_day,
+    } : null)
+  }
+
+  const saveExamDate = async ({ clear = false, regenerate = false } = {}) => {
+    setSaving(true)
+    try {
+      const payload = clear
+        ? { exam_date: null, regenerate: false }
+        : { exam_date: examDateDraft, regenerate }
+      const { data } = await fcpsStudyPlannerService.updateExamDate(payload)
+      setPlan(data.data?.plan)
+      setDash(data.data?.dashboard)
+      setExamEditOpen(false)
+      toast.success(clear ? 'Exam countdown cleared' : regenerate ? 'Exam date saved & plan regenerated' : 'Exam date updated')
+      if (regenerate) load()
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const saveDayEdit = async () => {
+    if (!dayModal?.date || !dayEdit) return
+    setSavingDay(true)
+    try {
+      const { data } = await fcpsStudyPlannerService.updateDay({
+        date: dayModal.date,
+        topics: dayEdit.topics,
+        mcq_target: Number(dayEdit.mcq_target) || 0,
+        flashcard_target: Number(dayEdit.flashcard_target) || 0,
+        revision_subject: dayEdit.revision_subject,
+        notes: dayEdit.notes,
+        is_study_day: dayEdit.is_study_day,
+      })
+      setDayModal(data.data)
+      const d = data.data?.day
+      if (d) {
+        setDayEdit({
+          topics: (d.topics || []).join(', '),
+          mcq_target: d.mcq_target ?? 0,
+          flashcard_target: d.flashcard_target ?? 0,
+          revision_subject: d.revision_subject || '',
+          notes: d.notes || '',
+          is_study_day: !!d.is_study_day,
+        })
+      }
+      toast.success('Plan day updated')
+      load()
+      fcpsStudyPlannerService.calendar(month)
+        .then(({ data: cal }) => setCalDays(cal.data?.days || []))
+        .catch(() => {})
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message)
+    } finally {
+      setSavingDay(false)
+    }
   }
 
   const setTask = async (task, status) => {
@@ -260,7 +330,6 @@ export default function FcpsStudyPlanner() {
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-teal-600">Premium · PHP Scheduler</p>
           <h2 className="font-display text-2xl font-bold text-navy dark:text-slate-100">FCPS Study Planner</h2>
-          <p className="text-sm text-slate-500">Personalized plan powered by scheduling algorithms — no AI required.</p>
         </div>
         {plan && (
           <div className="flex flex-wrap gap-2">
@@ -371,9 +440,30 @@ export default function FcpsStudyPlanner() {
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-50 to-white p-5 shadow-soft dark:border-teal-900 dark:from-teal-950 dark:to-slate-900">
-              <p className="text-xs font-semibold uppercase text-teal-600">Exam countdown</p>
-              <p className="mt-2 text-4xl font-bold text-navy dark:text-white">{dash.exam_countdown_days}</p>
-              <p className="text-xs text-slate-500">days · {dash.exam_date}</p>
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-xs font-semibold uppercase text-teal-600">Exam countdown</p>
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-teal-700 hover:underline"
+                  onClick={() => {
+                    setExamDateDraft(dash.exam_date?.slice?.(0, 10) || plan?.exam_date?.slice?.(0, 10) || '')
+                    setExamEditOpen(true)
+                  }}
+                >
+                  <FiEdit2 className="mr-0.5 inline" /> Edit
+                </button>
+              </div>
+              {dash.exam_date ? (
+                <>
+                  <p className="mt-2 text-4xl font-bold text-navy dark:text-white">{dash.exam_countdown_days ?? '—'}</p>
+                  <p className="text-xs text-slate-500">days · {dash.exam_date}</p>
+                </>
+              ) : (
+                <>
+                  <p className="mt-2 text-2xl font-bold text-slate-400">No exam date</p>
+                  <p className="text-xs text-slate-500">Set an FCPS exam date to start the countdown</p>
+                </>
+              )}
             </div>
             <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-soft dark:border-slate-800 dark:bg-slate-900">
               <p className="text-xs font-semibold uppercase text-slate-400">Study streak</p>
@@ -539,9 +629,128 @@ export default function FcpsStudyPlanner() {
         </div>
       )}
 
-      <Modal open={!!dayModal} onClose={() => setDayModal(null)} title={dayModal?.date ? `Plan · ${dayModal.date}` : 'Day'} size="lg">
+      <Modal
+        open={examEditOpen}
+        onClose={() => setExamEditOpen(false)}
+        title="FCPS exam date"
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            Change the exam date for the countdown, clear it completely, or save and regenerate the full schedule to the new date.
+          </p>
+          <label className="block text-sm">
+            <span className="text-xs font-semibold text-slate-500">Exam date</span>
+            <input
+              type="date"
+              className="input-field mt-1 w-full"
+              value={examDateDraft}
+              onChange={(e) => setExamDateDraft(e.target.value)}
+            />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={saving || !examDateDraft}
+              onClick={() => saveExamDate({ regenerate: false })}
+              className="btn-primary text-sm disabled:opacity-50"
+            >
+              Save exam date
+            </button>
+            <button
+              type="button"
+              disabled={saving || !examDateDraft}
+              onClick={() => {
+                if (!window.confirm('Regenerate the whole study plan to this exam date? Existing day progress will be replaced.')) return
+                saveExamDate({ regenerate: true })
+              }}
+              className="btn-secondary text-sm disabled:opacity-50"
+            >
+              Save & regenerate plan
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => {
+                if (!window.confirm('Clear the exam countdown completely? You can set a new date anytime.')) return
+                saveExamDate({ clear: true })
+              }}
+              className="btn-secondary text-sm text-red-600 disabled:opacity-50"
+            >
+              <FiTrash2 className="mr-1 inline" /> Clear countdown
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={!!dayModal} onClose={() => { setDayModal(null); setDayEdit(null) }} title={dayModal?.date ? `Plan · ${dayModal.date}` : 'Day'} size="lg">
         {dayModal && (
           <div className="space-y-4">
+            {dayEdit && (
+              <div className="space-y-3 rounded-xl border border-teal-100 bg-teal-50/50 p-4 dark:border-teal-900 dark:bg-teal-950/30">
+                <p className="text-sm font-semibold text-navy dark:text-slate-100"><FiEdit2 className="mr-1 inline" /> Edit plan day</p>
+                <label className="block text-sm">
+                  <span className="text-xs font-semibold text-slate-500">Topics (comma-separated)</span>
+                  <textarea
+                    rows={2}
+                    className="input-field mt-1 w-full"
+                    value={dayEdit.topics}
+                    onChange={(e) => setDayEdit({ ...dayEdit, topics: e.target.value })}
+                  />
+                </label>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block text-sm">
+                    <span className="text-xs font-semibold text-slate-500">MCQ target</span>
+                    <input
+                      type="number"
+                      min={0}
+                      className="input-field mt-1 w-full"
+                      value={dayEdit.mcq_target}
+                      onChange={(e) => setDayEdit({ ...dayEdit, mcq_target: e.target.value })}
+                    />
+                  </label>
+                  <label className="block text-sm">
+                    <span className="text-xs font-semibold text-slate-500">Flashcard target</span>
+                    <input
+                      type="number"
+                      min={0}
+                      className="input-field mt-1 w-full"
+                      value={dayEdit.flashcard_target}
+                      onChange={(e) => setDayEdit({ ...dayEdit, flashcard_target: e.target.value })}
+                    />
+                  </label>
+                </div>
+                <label className="block text-sm">
+                  <span className="text-xs font-semibold text-slate-500">Revision subject</span>
+                  <input
+                    type="text"
+                    className="input-field mt-1 w-full"
+                    value={dayEdit.revision_subject}
+                    onChange={(e) => setDayEdit({ ...dayEdit, revision_subject: e.target.value })}
+                  />
+                </label>
+                <label className="block text-sm">
+                  <span className="text-xs font-semibold text-slate-500">Notes</span>
+                  <textarea
+                    rows={2}
+                    className="input-field mt-1 w-full"
+                    value={dayEdit.notes}
+                    onChange={(e) => setDayEdit({ ...dayEdit, notes: e.target.value })}
+                  />
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={dayEdit.is_study_day}
+                    onChange={(e) => setDayEdit({ ...dayEdit, is_study_day: e.target.checked })}
+                  />
+                  Study day
+                </label>
+                <button type="button" disabled={savingDay} onClick={saveDayEdit} className="btn-primary text-sm disabled:opacity-50">
+                  {savingDay ? 'Saving…' : 'Save day changes'}
+                </button>
+              </div>
+            )}
             <ul className="space-y-2">
               {(dayModal.tasks || []).map((t) => (
                 <li key={t.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-100 px-3 py-2 text-sm dark:border-slate-800">

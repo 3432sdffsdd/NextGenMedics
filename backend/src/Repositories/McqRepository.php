@@ -341,6 +341,169 @@ class McqRepository extends BaseRepository
         ];
     }
 
+    /**
+     * Lecture/topic labels for published Study Tools MCQs (Question Bank filters).
+     * @return list<array{id:int,title:string,question_count:int,course_title:string}>
+     */
+    public function topicsForCourses(array $courseIds): array
+    {
+        $courseIds = array_values(array_filter(array_map('intval', $courseIds)));
+        if (!$courseIds) {
+            return [];
+        }
+        $in = implode(',', array_fill(0, count($courseIds), '?'));
+        $stmt = $this->db->prepare(
+            "SELECT l.id, l.title,
+                    c.title AS course_title,
+                    COUNT(m.id) AS question_count
+             FROM mcqs m
+             JOIN lectures l ON l.id = m.lecture_id
+             JOIN chapters ch ON ch.id = l.chapter_id
+             JOIN modules mo ON mo.id = ch.module_id
+             JOIN courses c ON c.id = mo.course_id
+             WHERE m.status IN ('published','approved')
+               AND mo.course_id IN ({$in})
+             GROUP BY l.id, l.title, c.title
+             HAVING question_count > 0
+             ORDER BY c.title ASC, l.title ASC"
+        );
+        $stmt->execute($courseIds);
+        return array_map(static function ($r) {
+            return [
+                'id'             => (int) $r['id'],
+                'title'          => (string) $r['title'],
+                'course_title'   => (string) $r['course_title'],
+                'question_count' => (int) $r['question_count'],
+                'source_type'    => 'study',
+            ];
+        }, $stmt->fetchAll());
+    }
+
+    /**
+     * Browse Study Tools MCQs for Question Bank (same shape as quiz bank items).
+     * @return list<array>
+     */
+    public function listBankItems(int $studentId, array $courseIds, array $filters, int $limit = 500): array
+    {
+        $courseIds = array_values(array_filter(array_map('intval', $courseIds)));
+        if (!$courseIds || $limit <= 0) {
+            return [];
+        }
+        $in = implode(',', array_fill(0, count($courseIds), '?'));
+        $where = [
+            "m.status IN ('published','approved')",
+            "mo.course_id IN ({$in})",
+        ];
+        $params = $courseIds;
+
+        if (!empty($filters['topic'])) {
+            $where[] = '(l.title = ? OR m.topic = ?)';
+            $params[] = $filters['topic'];
+            $params[] = $filters['topic'];
+        }
+        if (!empty($filters['search'])) {
+            $where[] = 'm.question LIKE ?';
+            $params[] = '%' . $filters['search'] . '%';
+        }
+        $attemptFilter = (string) ($filters['attempt_filter'] ?? '');
+        if ($attemptFilter === 'unattempted') {
+            $where[] = 'NOT EXISTS (
+                SELECT 1 FROM mcq_attempt_answers aa
+                JOIN mcq_attempts a ON a.id = aa.attempt_id
+                WHERE a.student_id = ? AND aa.mcq_id = m.id)';
+            $params[] = $studentId;
+        } elseif ($attemptFilter === 'attempted') {
+            $where[] = 'EXISTS (
+                SELECT 1 FROM mcq_attempt_answers aa
+                JOIN mcq_attempts a ON a.id = aa.attempt_id
+                WHERE a.student_id = ? AND aa.mcq_id = m.id)';
+            $params[] = $studentId;
+        }
+
+        $sid = (int) $studentId;
+        $params[] = $limit;
+        $stmt = $this->db->prepare(
+            "SELECT m.id, m.question, m.topic, l.title AS lecture_title, c.title AS course_title,
+                    EXISTS (
+                        SELECT 1 FROM mcq_attempt_answers aa
+                        JOIN mcq_attempts a ON a.id = aa.attempt_id
+                        WHERE a.student_id = {$sid} AND aa.mcq_id = m.id
+                    ) AS attempted
+             FROM mcqs m
+             JOIN lectures l ON l.id = m.lecture_id
+             JOIN chapters ch ON ch.id = l.chapter_id
+             JOIN modules mo ON mo.id = ch.module_id
+             JOIN courses c ON c.id = mo.course_id
+             WHERE " . implode(' AND ', $where) . "
+             ORDER BY l.title ASC, m.sort_order ASC, m.id ASC
+             LIMIT ?"
+        );
+        $stmt->execute($params);
+        $items = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $topic = trim((string) ($row['topic'] ?: $row['lecture_title']));
+            $items[] = [
+                'id'           => (int) $row['id'],
+                'bank_id'      => 'study-' . (int) $row['id'],
+                'source_type'  => 'study',
+                'question'     => (string) $row['question'],
+                'topic'        => $topic,
+                'subject'      => $topic,
+                'chapter'      => $topic,
+                'course_title' => (string) $row['course_title'],
+                'attempted'    => (int) $row['attempted'] === 1,
+                'is_correct'   => null,
+            ];
+        }
+        return $items;
+    }
+
+    /** @return list<int> */
+    public function pickBankIds(int $studentId, array $courseIds, array $filters, int $limit = 20): array
+    {
+        $courseIds = array_values(array_filter(array_map('intval', $courseIds)));
+        if (!$courseIds || $limit <= 0) {
+            return [];
+        }
+        $in = implode(',', array_fill(0, count($courseIds), '?'));
+        $where = [
+            "m.status IN ('published','approved')",
+            "mo.course_id IN ({$in})",
+        ];
+        $params = $courseIds;
+        if (!empty($filters['topic'])) {
+            $where[] = '(l.title = ? OR m.topic = ?)';
+            $params[] = $filters['topic'];
+            $params[] = $filters['topic'];
+        }
+        $attemptFilter = (string) ($filters['attempt_filter'] ?? '');
+        if ($attemptFilter === 'unattempted') {
+            $where[] = 'NOT EXISTS (
+                SELECT 1 FROM mcq_attempt_answers aa
+                JOIN mcq_attempts a ON a.id = aa.attempt_id
+                WHERE a.student_id = ? AND aa.mcq_id = m.id)';
+            $params[] = $studentId;
+        } elseif ($attemptFilter === 'attempted') {
+            $where[] = 'EXISTS (
+                SELECT 1 FROM mcq_attempt_answers aa
+                JOIN mcq_attempts a ON a.id = aa.attempt_id
+                WHERE a.student_id = ? AND aa.mcq_id = m.id)';
+            $params[] = $studentId;
+        }
+        $params[] = $limit;
+        $stmt = $this->db->prepare(
+            "SELECT m.id FROM mcqs m
+             JOIN lectures l ON l.id = m.lecture_id
+             JOIN chapters ch ON ch.id = l.chapter_id
+             JOIN modules mo ON mo.id = ch.module_id
+             WHERE " . implode(' AND ', $where) . "
+             ORDER BY RAND()
+             LIMIT ?"
+        );
+        $stmt->execute($params);
+        return array_map('intval', array_column($stmt->fetchAll(), 'id'));
+    }
+
     private function maxSort(int $lectureId): int
     {
         $stmt = $this->db->prepare('SELECT COALESCE(MAX(sort_order), 0) FROM mcqs WHERE lecture_id = ?');

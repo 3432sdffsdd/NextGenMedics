@@ -11,23 +11,27 @@ class AuthController extends BaseController
 
     public function login(Request $request): void
     {
-        $data = $this->validate($request, [
-            'email'    => 'required|email',
-            'password' => 'required|min:6',
-        ]);
-        if (!$data) return;
+        try {
+            $data = $this->validate($request, [
+                'email'    => 'required|email',
+                'password' => 'required|min:6',
+            ]);
+            if (!$data) return;
 
-        $result = $this->auth->login($data['email'], $data['password'], $request->ip());
-        if (!$result) {
-            Response::error('Invalid credentials', 401);
-            return;
-        }
-        if (isset($result['error'])) {
-            Response::error($result['error'], 403);
-            return;
-        }
+            $result = $this->auth->login($data['email'], $data['password'], $request->ip());
+            if (!$result) {
+                Response::error('Invalid credentials', 401);
+                return;
+            }
+            if (isset($result['error'])) {
+                Response::error($result['error'], 403);
+                return;
+            }
 
-        Response::json($result);
+            Response::json($result);
+        } catch (\Throwable $e) {
+            Response::error('Login error: ' . $e->getMessage(), 500);
+        }
     }
 
     public function me(Request $request): void

@@ -39,10 +39,18 @@ class Application
             }
             [$key, $value] = explode('=', $line, 2);
             $key = trim($key);
-            $value = trim($value, " \t\n\r\0\x0B\"'");
+            $value = trim($value);
+            // Strip matching single/double quotes around the value.
+            if (
+                (str_starts_with($value, '"') && str_ends_with($value, '"'))
+                || (str_starts_with($value, "'") && str_ends_with($value, "'"))
+            ) {
+                $value = substr($value, 1, -1);
+            }
             // Always prefer .env file (shared hosts may expose empty getenv() values).
             putenv("{$key}={$value}");
             $_ENV[$key] = $value;
+            $_SERVER[$key] = $value;
         }
     }
 
@@ -95,6 +103,10 @@ class Application
             'App\Repositories\QuizQuestionBankRepository',
             'App\Repositories\StudentVideoWatchRepository',
             'App\Repositories\FcpsStudyPlannerRepository',
+            'App\Repositories\GoalStudyPlannerRepository',
+            'App\Repositories\PersonalStudyPlannerRepository',
+            'App\Repositories\VideoTrackingRepository',
+            'App\Repositories\StudentPerformanceRepository',
         ];
 
         foreach ($repos as $repo) {
@@ -211,6 +223,84 @@ class Application
                 $c->get('App\Repositories\StudentQuestionHistoryRepository'),
                 $c->get('App\Repositories\StreakRepository'),
                 $c->get('App\Services\StudyService')
+            );
+        });
+
+        // ── Goal-based Study Planner (LMS content, PHP only) ───
+        $this->container->singleton('App\Services\GoalPlanner\ContentCatalogService', function ($c) {
+            return new \App\Services\GoalPlanner\ContentCatalogService(
+                $c->get('App\Repositories\CourseRepository'),
+                $c->get(Database::class)
+            );
+        });
+        $this->container->singleton('App\Services\GoalPlanner\ScheduleGeneratorService', fn() => new \App\Services\GoalPlanner\ScheduleGeneratorService());
+        $this->container->singleton('App\Services\GoalPlanner\GoalStudyPlannerService', function ($c) {
+            return new \App\Services\GoalPlanner\GoalStudyPlannerService(
+                $c->get('App\Repositories\GoalStudyPlannerRepository'),
+                $c->get('App\Services\GoalPlanner\ContentCatalogService'),
+                $c->get('App\Services\GoalPlanner\ScheduleGeneratorService'),
+                $c->get('App\Services\NotificationService')
+            );
+        });
+
+        // ── Video Tracking & Analytics ─────────────────────────
+        $this->container->singleton('App\Services\VideoTracking\VideoTrackingService', function ($c) {
+            return new \App\Services\VideoTracking\VideoTrackingService(
+                $c->get('App\Repositories\VideoTrackingRepository'),
+                $c->get('App\Repositories\CourseRepository')
+            );
+        });
+
+        // ── Teacher Student Performance ────────────────────────
+        $this->container->singleton('App\Services\StudentPerformanceService', function ($c) {
+            return new \App\Services\StudentPerformanceService(
+                $c->get('App\Repositories\StudentPerformanceRepository'),
+                $c->get('App\Repositories\MistakeRepository'),
+                $c->get('App\Repositories\AnalyticsRepository'),
+                $c->get('App\Repositories\VideoTrackingRepository'),
+                $c->get('App\Repositories\StudentQuestionHistoryRepository')
+            );
+        });
+
+        // ── Personal Study Planner (LMS + manual + mixed, PHP only) ──
+        $this->container->singleton('App\Services\PersonalPlanner\ScheduleGeneratorService', fn() => new \App\Services\PersonalPlanner\ScheduleGeneratorService());
+        $this->container->singleton('App\Services\PersonalPlanner\ProgressService', function ($c) {
+            return new \App\Services\PersonalPlanner\ProgressService(
+                $c->get('App\Repositories\PersonalStudyPlannerRepository')
+            );
+        });
+        $this->container->singleton('App\Services\PersonalPlanner\CalendarService', function ($c) {
+            return new \App\Services\PersonalPlanner\CalendarService(
+                $c->get('App\Repositories\PersonalStudyPlannerRepository')
+            );
+        });
+        $this->container->singleton('App\Services\PersonalPlanner\StatisticsService', function ($c) {
+            return new \App\Services\PersonalPlanner\StatisticsService(
+                $c->get('App\Repositories\PersonalStudyPlannerRepository'),
+                $c->get('App\Services\PersonalPlanner\ProgressService')
+            );
+        });
+        $this->container->singleton('App\Services\PersonalPlanner\HistoryService', function ($c) {
+            return new \App\Services\PersonalPlanner\HistoryService(
+                $c->get('App\Repositories\PersonalStudyPlannerRepository')
+            );
+        });
+        $this->container->singleton('App\Services\PersonalPlanner\ExportService', function ($c) {
+            return new \App\Services\PersonalPlanner\ExportService(
+                $c->get('App\Repositories\PersonalStudyPlannerRepository')
+            );
+        });
+        $this->container->singleton('App\Services\PersonalPlanner\StudyPlannerService', function ($c) {
+            return new \App\Services\PersonalPlanner\StudyPlannerService(
+                $c->get('App\Repositories\PersonalStudyPlannerRepository'),
+                $c->get('App\Services\GoalPlanner\ContentCatalogService'),
+                $c->get('App\Services\PersonalPlanner\ScheduleGeneratorService'),
+                $c->get('App\Services\PersonalPlanner\ProgressService'),
+                $c->get('App\Services\PersonalPlanner\CalendarService'),
+                $c->get('App\Services\PersonalPlanner\StatisticsService'),
+                $c->get('App\Services\PersonalPlanner\HistoryService'),
+                $c->get('App\Services\PersonalPlanner\ExportService'),
+                $c->get('App\Services\NotificationService')
             );
         });
 

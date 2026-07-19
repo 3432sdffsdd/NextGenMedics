@@ -23,6 +23,12 @@ class CorsMiddleware
 
         if ($allowed) {
             header("Access-Control-Allow-Origin: {$origin}");
+            header('Vary: Origin');
+        } elseif ($origin !== '' && preg_match('#^https?://([a-z0-9-]+\.)*nextgenmedics\.(info|com)(:\d+)?$#i', $origin)) {
+            // Allow live NextGen Medics hosts even if APP_ENV misconfigured
+            header("Access-Control-Allow-Origin: {$origin}");
+            header('Vary: Origin');
+            $allowed = true;
         } elseif ($config['app_env'] === 'development') {
             header('Access-Control-Allow-Origin: *');
         }

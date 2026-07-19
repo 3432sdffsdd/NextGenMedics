@@ -11,8 +11,12 @@ class RateLimitMiddleware
     public function __construct(private int $maxRequests = 60, private int $windowSeconds = 60)
     {
         $this->storageDir = __DIR__ . '/../../storage/cache/rate_limit';
-        if (!is_dir($this->storageDir)) {
-            mkdir($this->storageDir, 0755, true);
+        try {
+            if (!is_dir($this->storageDir)) {
+                @mkdir($this->storageDir, 0755, true);
+            }
+        } catch (\Throwable) {
+            // Shared hosts may block mkdir — fail open below.
         }
     }
 
@@ -24,24 +28,33 @@ class RateLimitMiddleware
             return true;
         }
 
-        $key = md5($request->ip() . ':' . $request->uri());
-        $file = $this->storageDir . '/' . $key . '.json';
-        $now = time();
-
-        $data = ['count' => 0, 'start' => $now];
-        if (file_exists($file)) {
-            $data = json_decode(file_get_contents($file), true) ?: $data;
-            if ($now - $data['start'] > $this->windowSeconds) {
-                $data = ['count' => 0, 'start' => $now];
-            }
+        // If cache dir is not writable, do not break login/API (common on shared hosting).
+        if (!is_dir($this->storageDir) || !is_writable($this->storageDir)) {
+            return true;
         }
 
-        $data['count']++;
-        file_put_contents($file, json_encode($data));
+        try {
+            $key = md5($request->ip() . ':' . $request->uri());
+            $file = $this->storageDir . '/' . $key . '.json';
+            $now = time();
 
-        if ($data['count'] > $this->maxRequests) {
-            Response::error('Too many requests. Please try again later.', 429);
-            return false;
+            $data = ['count' => 0, 'start' => $now];
+            if (file_exists($file)) {
+                $data = json_decode((string) @file_get_contents($file), true) ?: $data;
+                if ($now - ($data['start'] ?? 0) > $this->windowSeconds) {
+                    $data = ['count' => 0, 'start' => $now];
+                }
+            }
+
+            $data['count'] = (int) ($data['count'] ?? 0) + 1;
+            @file_put_contents($file, json_encode($data));
+
+            if ($data['count'] > $this->maxRequests) {
+                Response::error('Too many requests. Please try again later.', 429);
+                return false;
+            }
+        } catch (\Throwable) {
+            return true;
         }
 
         return true;

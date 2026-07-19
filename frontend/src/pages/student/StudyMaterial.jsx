@@ -33,7 +33,11 @@ export default function StudyMaterial() {
         setTopics(d.topics || [])
         setVideos(d.videos || [])
       })
-      .catch((err) => toast.error(err.message || 'Failed to load videos'))
+      .catch((err) => {
+        const msg = err.response?.data?.message || err.message || 'Failed to load videos'
+        const status = err.response?.status
+        toast.error(status ? `HTTP ${status}: ${msg}` : msg)
+      })
       .finally(() => setLoading(false))
   }
 
@@ -62,7 +66,7 @@ export default function StudyMaterial() {
     <div>
       <h2 className="font-display text-2xl font-bold text-navy">Lecture Videos</h2>
       <p className="text-sm text-slate-500">
-        All lecture videos from your courses. Mark each as watched when you finish it.
+        All lecture videos from your courses. Progress is tracked automatically while you watch (95% = completed). You can still mark watched manually.
       </p>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-3">

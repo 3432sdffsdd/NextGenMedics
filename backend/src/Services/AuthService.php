@@ -30,7 +30,11 @@ class AuthService
         $tokens = $this->issueTokens($user);
         unset($user['password']);
 
-        $this->activityLog->log($user['id'], 'login', 'user', $user['id'], 'User logged in', $ip);
+        try {
+            $this->activityLog->log($user['id'], 'login', 'user', $user['id'], 'User logged in', $ip);
+        } catch (\Throwable) {
+            // Never block login if activity logging fails
+        }
 
         return [
             'token'         => $tokens['access_token'],

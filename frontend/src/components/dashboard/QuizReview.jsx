@@ -53,7 +53,8 @@ export default function QuizReview({ result, onClose, title }) {
                   <p className="text-sm font-medium text-navy">{i + 1}. {q.question_text}</p>
                   <div className="mt-2 space-y-1.5">
                     {(q.options || []).map((o) => {
-                      const selected = (q.selected || []).includes(o.id)
+                      const selectedIds = (q.selected || []).map((id) => Number(id))
+                      const selected = selectedIds.includes(Number(o.id))
                       const correctOpt = o.is_correct
                       let cls = 'bg-white border-slate-100 text-slate-600'
                       if (correctOpt) cls = 'bg-emerald-100 border-emerald-200 text-emerald-800'

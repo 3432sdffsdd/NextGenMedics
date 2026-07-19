@@ -41,7 +41,15 @@ export default function DailyChallenge() {
         setChallenge(ch.data.data)
         setHistory(hist.data.data || [])
       })
-      .catch(() => setLoadError('Could not load today\'s challenge. Make sure you are logged in and the server is up to date.'))
+      .catch((err) => {
+        const msg = err.response?.data?.message || err.message
+        const status = err.response?.status
+        setLoadError(
+          msg
+            ? `${status ? `HTTP ${status}: ` : ''}${msg}`
+            : 'Could not load today\'s challenge. Make sure you are logged in and the server is up to date.'
+        )
+      })
       .finally(() => setLoading(false))
   }
 

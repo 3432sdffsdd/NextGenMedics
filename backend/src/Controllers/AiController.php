@@ -82,7 +82,7 @@ class AiController extends BaseController
             'summary'    => true,
             'notes'      => true,
             'flashcards' => max(0, min(100, (int) ($body['flashcards'] ?? 30))),
-            'mcqs'       => max(0, min(200, (int) ($body['mcqs'] ?? 30))),
+            'mcqs'       => 0, // MCQs are uploaded manually — never AI-generated
         ];
         $text = isset($body['text']) ? trim((string) $body['text']) : null;
 

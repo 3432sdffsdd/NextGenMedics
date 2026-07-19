@@ -66,6 +66,44 @@ class FcpsStudyPlannerController extends BaseController
         }
     }
 
+    public function updateExamDate(Request $request): void
+    {
+        try {
+            $exam = $request->input('exam_date');
+            if ($exam === '' || $exam === false) {
+                $exam = null;
+            }
+            $regenerate = (bool) $request->input('regenerate', false);
+            Response::success(
+                $this->planner->updateExamDate($request->userId(), $exam !== null ? (string) $exam : null, $regenerate),
+                $exam ? 'Exam date updated' : 'Exam countdown cleared'
+            );
+        } catch (\InvalidArgumentException $e) {
+            Response::error($e->getMessage(), 422);
+        } catch (\Throwable $e) {
+            Response::error($e->getMessage(), 400);
+        }
+    }
+
+    public function updateDay(Request $request): void
+    {
+        $date = (string) ($request->input('date') ?: $request->query('date') ?: '');
+        if ($date === '') {
+            Response::error('date is required', 422);
+            return;
+        }
+        try {
+            Response::success(
+                $this->planner->updateDay($request->userId(), $date, $request->body()),
+                'Plan day updated'
+            );
+        } catch (\InvalidArgumentException $e) {
+            Response::error($e->getMessage(), 422);
+        } catch (\Throwable $e) {
+            Response::error($e->getMessage(), 400);
+        }
+    }
+
     public function setTask(Request $request): void
     {
         try {

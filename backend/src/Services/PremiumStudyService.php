@@ -382,20 +382,48 @@ class PremiumStudyService
     public function quizMistakes(int $studentId, array $filters, int $page = 1, int $perPage = 20): array
     {
         $this->questionHistory->syncFromQuizAttempts($studentId);
-        return $this->questionHistory->listMistakes($studentId, $filters, $page, $perPage);
+        $result = $this->questionHistory->listMistakes($studentId, $filters, $page, $perPage);
+        $items = [];
+        foreach ($result['items'] ?? [] as $row) {
+            $q = $this->quizBank->findOneWithOptions((int) ($row['mcq_id'] ?? 0), true);
+            $options = [];
+            if ($q) {
+                foreach (['A', 'B', 'C', 'D', 'E'] as $l) {
+                    $options[$l] = $q['option_' . strtolower($l)] ?? '';
+                }
+            }
+            $selected = $row['selected_option'] ?? null;
+            if (is_string($selected)) {
+                $selected = strtoupper(trim($selected));
+                if ($selected === '') {
+                    $selected = null;
+                }
+            }
+            $correct = $q['correct_option'] ?? null;
+            $items[] = array_merge($row, [
+                'selected_option' => $selected,
+                'selected_option_text' => ($selected && isset($options[$selected])) ? $options[$selected] : null,
+                'correct_option' => $correct,
+                'correct_option_text' => ($correct && isset($options[$correct])) ? $options[$correct] : null,
+                'options' => $options,
+            ]);
+        }
+        $result['items'] = $items;
+        return $result;
     }
 
     public function quizMistakeStats(int $studentId): array
     {
         $this->questionHistory->syncFromQuizAttempts($studentId);
-        $incorrect = $this->questionHistory->countIncorrect($studentId);
-        $correct = $this->questionHistory->countCorrect($studentId);
+        $remaining = $this->questionHistory->countIncorrect($studentId);
+        $mastered = $this->questionHistory->countMasteredMistakes($studentId);
         return [
-            'total'     => $incorrect + $correct,
-            'remaining' => $incorrect,
-            'mastered'  => $correct,
-            'incorrect' => $incorrect,
-            'correct'   => $correct,
+            // Total = open mistakes + ones cleared via practice (not all quiz corrects)
+            'total'     => $remaining + $mastered,
+            'remaining' => $remaining,
+            'mastered'  => $mastered,
+            'incorrect' => $remaining,
+            'correct'   => $mastered,
         ];
     }
 
@@ -425,10 +453,145 @@ class PremiumStudyService
         return $this->submitQuizPracticeAnswers($studentId, $answers, $timeSpentSeconds, 'weak');
     }
 
-    /** Question Bank practice submit → marks attempted + feeds My Mistakes. */
+    /** Question Bank practice submit → quiz history + Study Tools attempts / mistakes. */
     public function submitBankPractice(int $studentId, array $answers, int $timeSpentSeconds = 0): array
     {
-        return $this->submitQuizPracticeAnswers($studentId, $answers, $timeSpentSeconds, 'practice');
+        $quizAnswers = [];
+        $studyAnswers = [];
+        foreach ($answers as $a) {
+            $sourceType = (string) ($a['source_type'] ?? '');
+            $bankId = (string) ($a['bank_id'] ?? $a['mcq_id'] ?? '');
+            if ($sourceType === '' && is_string($bankId)) {
+                if (str_starts_with($bankId, 'study-')) {
+                    $sourceType = 'study';
+                } elseif (str_starts_with($bankId, 'quiz-')) {
+                    $sourceType = 'quiz';
+                }
+            }
+            if ($sourceType === 'study') {
+                $raw = (int) ($a['raw_id'] ?? 0);
+                if ($raw <= 0 && str_starts_with($bankId, 'study-')) {
+                    $raw = (int) substr($bankId, 6);
+                }
+                if ($raw <= 0) {
+                    $raw = (int) ($a['mcq_id'] ?? 0);
+                }
+                if ($raw > 0) {
+                    $studyAnswers[] = array_merge($a, ['mcq_id' => $raw, 'bank_id' => 'study-' . $raw]);
+                }
+            } else {
+                $raw = (int) ($a['raw_id'] ?? 0);
+                if ($raw <= 0 && str_starts_with($bankId, 'quiz-')) {
+                    $raw = (int) substr($bankId, 5);
+                }
+                if ($raw <= 0) {
+                    $raw = (int) ($a['mcq_id'] ?? $a['question_id'] ?? 0);
+                }
+                if ($raw > 0) {
+                    $quizAnswers[] = array_merge($a, ['mcq_id' => $raw, 'bank_id' => 'quiz-' . $raw]);
+                }
+            }
+        }
+
+        $quizResult = $quizAnswers
+            ? $this->submitQuizPracticeAnswers($studentId, $quizAnswers, $timeSpentSeconds, 'practice')
+            : ['total' => 0, 'correct' => 0, 'wrong' => 0, 'score' => 0, 'review' => []];
+        $studyResult = $studyAnswers
+            ? $this->submitStudyToolBankAnswers($studentId, $studyAnswers, $timeSpentSeconds)
+            : ['total' => 0, 'correct' => 0, 'wrong' => 0, 'score' => 0, 'review' => []];
+
+        $total = (int) $quizResult['total'] + (int) $studyResult['total'];
+        $correct = (int) $quizResult['correct'] + (int) $studyResult['correct'];
+        $wrong = max(0, $total - $correct);
+        $score = $total > 0 ? round($correct / $total * 100, 2) : 0.0;
+
+        return [
+            'total'      => $total,
+            'correct'    => $correct,
+            'wrong'      => $wrong,
+            'score'      => $score,
+            'time_spent' => $timeSpentSeconds,
+            'review'     => array_merge($quizResult['review'] ?? [], $studyResult['review'] ?? []),
+        ];
+    }
+
+    private function submitStudyToolBankAnswers(int $studentId, array $answers, int $timeSpentSeconds): array
+    {
+        $ids = [];
+        $answerMap = [];
+        $bankMap = [];
+        foreach ($answers as $a) {
+            $qid = (int) ($a['mcq_id'] ?? 0);
+            if (!$qid) {
+                continue;
+            }
+            $ids[] = $qid;
+            $sel = isset($a['selected_option']) ? strtoupper((string) $a['selected_option']) : null;
+            $answerMap[$qid] = in_array($sel, ['A', 'B', 'C', 'D', 'E'], true) ? $sel : null;
+            $bankMap[$qid] = (string) ($a['bank_id'] ?? ('study-' . $qid));
+        }
+        $ids = array_values(array_unique($ids));
+        $questions = $this->mcqs->findByIds($ids, true);
+        $byId = [];
+        foreach ($questions as $q) {
+            $byId[(int) $q['id']] = $q;
+        }
+        if (!$byId) {
+            return ['total' => 0, 'correct' => 0, 'wrong' => 0, 'score' => 0, 'review' => []];
+        }
+
+        $lectureId = (int) ($questions[0]['lecture_id'] ?? 0);
+        $attemptId = $this->attempts->create($studentId, [
+            'source'          => 'bank',
+            'lecture_id'      => $lectureId ?: null,
+            'total_questions' => count($ids),
+        ]);
+
+        $correct = 0;
+        $review = [];
+        foreach ($ids as $qid) {
+            $q = $byId[$qid] ?? null;
+            if (!$q) {
+                continue;
+            }
+            $selected = $answerMap[$qid] ?? null;
+            $isCorrect = $selected !== null && $selected === ($q['correct_option'] ?? null);
+            if ($isCorrect) {
+                $correct++;
+            }
+            $this->attempts->addAnswer($attemptId, $qid, $selected, $isCorrect, 0);
+            $this->mistakes->recordAnswer($studentId, $qid, $isCorrect);
+            $review[] = [
+                'mcq_id'          => $bankMap[$qid] ?? ('study-' . $qid),
+                'question'        => $q['question'],
+                'options'         => [
+                    'A' => $q['option_a'] ?? '',
+                    'B' => $q['option_b'] ?? '',
+                    'C' => $q['option_c'] ?? '',
+                    'D' => $q['option_d'] ?? '',
+                    'E' => $q['option_e'] ?? '',
+                ],
+                'correct_option'  => $q['correct_option'] ?? null,
+                'selected_option' => $selected,
+                'is_correct'      => $isCorrect,
+                'explanation'     => $q['explanation'] ?? null,
+                'topic'           => $q['topic'] ?? null,
+            ];
+        }
+        $total = count($ids);
+        $wrong = max(0, $total - $correct);
+        $score = $total > 0 ? round($correct / $total * 100, 2) : 0.0;
+        $this->attempts->finalize($attemptId, $correct, $wrong, $score, $timeSpentSeconds);
+        $this->study->recordActivity($studentId, 'mcq');
+
+        return [
+            'total'      => $total,
+            'correct'    => $correct,
+            'wrong'      => $wrong,
+            'score'      => $score,
+            'time_spent' => $timeSpentSeconds,
+            'review'     => $review,
+        ];
     }
 
     private function submitQuizPracticeAnswers(
@@ -439,14 +602,26 @@ class PremiumStudyService
     ): array {
         $ids = [];
         $answerMap = [];
+        $bankMap = [];
         foreach ($answers as $a) {
-            $qid = (int) ($a['mcq_id'] ?? $a['question_id'] ?? 0);
-            if (!$qid) {
+            $qid = (int) ($a['raw_id'] ?? 0);
+            if ($qid <= 0) {
+                $qid = (int) ($a['mcq_id'] ?? $a['question_id'] ?? 0);
+            }
+            $bankId = (string) ($a['bank_id'] ?? '');
+            if ($qid <= 0 && str_starts_with($bankId, 'quiz-')) {
+                $qid = (int) substr($bankId, 5);
+            }
+            if ($qid <= 0 && is_string($a['mcq_id'] ?? null) && str_starts_with((string) $a['mcq_id'], 'quiz-')) {
+                $qid = (int) substr((string) $a['mcq_id'], 5);
+            }
+            if ($qid <= 0) {
                 continue;
             }
             $ids[] = $qid;
             $sel = isset($a['selected_option']) ? strtoupper((string) $a['selected_option']) : null;
             $answerMap[$qid] = in_array($sel, ['A', 'B', 'C', 'D', 'E'], true) ? $sel : null;
+            $bankMap[$qid] = $bankId !== '' ? $bankId : ('quiz-' . $qid);
         }
         $ids = array_values(array_unique($ids));
         $questions = $this->quizBank->findByIds($ids, true);
@@ -474,7 +649,7 @@ class PremiumStudyService
                 $options[$l] = $q['option_' . strtolower($l)] ?? '';
             }
             $review[] = [
-                'mcq_id'          => $qid,
+                'mcq_id'          => $bankMap[$qid] ?? $qid,
                 'question'        => $q['question'],
                 'options'         => $options,
                 'correct_option'  => $q['correct_option'] ?? null,
@@ -501,10 +676,29 @@ class PremiumStudyService
     public function questionBankFilters(int $studentId): array
     {
         $courseIds = array_column($this->courses->listByStudent($studentId), 'id');
-        $topics = $this->quizBank->topicsForCourses($courseIds);
+        $quizTopics = $this->quizBank->topicsForCourses($courseIds);
+        $studyTopics = $this->mcqs->topicsForCourses($courseIds);
+        $merged = [];
+        foreach (array_merge($quizTopics, $studyTopics) as $t) {
+            $title = (string) ($t['title'] ?? '');
+            if ($title === '') {
+                continue;
+            }
+            if (!isset($merged[$title])) {
+                $merged[$title] = [
+                    'id'             => (int) ($t['id'] ?? 0),
+                    'title'          => $title,
+                    'course_title'   => (string) ($t['course_title'] ?? ''),
+                    'question_count' => 0,
+                ];
+            }
+            $merged[$title]['question_count'] += (int) ($t['question_count'] ?? 0);
+        }
+        $topics = array_values($merged);
+        usort($topics, static fn($a, $b) => strcasecmp($a['title'], $b['title']));
         return [
-            'topics' => array_map(static fn($t) => $t['title'], $topics),
-            'quizzes'=> $topics,
+            'topics'  => array_map(static fn($t) => $t['title'], $topics),
+            'quizzes' => $topics,
         ];
     }
 
@@ -512,17 +706,96 @@ class PremiumStudyService
     {
         $this->questionHistory->syncFromQuizAttempts($studentId);
         $courseIds = array_column($this->courses->listByStudent($studentId), 'id');
-        return $this->quizBank->searchBank($studentId, $courseIds, $filters, $page, $perPage);
+        $quiz = $this->quizBank->searchBank($studentId, $courseIds, $filters, 1, 500);
+        $study = $this->mcqs->listBankItems($studentId, $courseIds, $filters, 500);
+
+        $items = [];
+        foreach ($quiz['items'] ?? [] as $row) {
+            $id = (int) $row['id'];
+            $items[] = array_merge($row, [
+                'id'          => $id,
+                'bank_id'     => 'quiz-' . $id,
+                'source_type' => 'quiz',
+            ]);
+        }
+        foreach ($study as $row) {
+            $items[] = $row;
+        }
+
+        usort($items, static function ($a, $b) {
+            $cmp = strcasecmp((string) ($a['topic'] ?? ''), (string) ($b['topic'] ?? ''));
+            return $cmp !== 0 ? $cmp : ((int) ($a['id'] ?? 0) <=> (int) ($b['id'] ?? 0));
+        });
+
+        $total = count($items);
+        $offset = max(0, ($page - 1) * $perPage);
+        return [
+            'items'    => array_slice($items, $offset, $perPage),
+            'total'    => $total,
+            'page'     => $page,
+            'per_page' => $perPage,
+        ];
     }
 
     public function questionBankPractice(int $studentId, array $filters, int $limit = 20): array
     {
         $this->questionHistory->syncFromQuizAttempts($studentId);
         $courseIds = array_column($this->courses->listByStudent($studentId), 'id');
-        $ids = $this->quizBank->pickBankIds($studentId, $courseIds, $filters, $limit);
+        $half = max(1, (int) ceil($limit / 2));
+        $quizIds = $this->quizBank->pickBankIds($studentId, $courseIds, $filters, $half);
+        $studyIds = $this->mcqs->pickBankIds($studentId, $courseIds, $filters, $limit - count($quizIds));
+        // If one source is short, fill from the other
+        if (count($quizIds) + count($studyIds) < $limit) {
+            $need = $limit - count($quizIds) - count($studyIds);
+            if (count($studyIds) < $half) {
+                $quizIds = array_values(array_unique(array_merge(
+                    $quizIds,
+                    $this->quizBank->pickBankIds($studentId, $courseIds, $filters, $need + count($quizIds))
+                )));
+                $quizIds = array_slice($quizIds, 0, $limit - count($studyIds));
+            } else {
+                $studyIds = array_values(array_unique(array_merge(
+                    $studyIds,
+                    $this->mcqs->pickBankIds($studentId, $courseIds, $filters, $need + count($studyIds))
+                )));
+                $studyIds = array_slice($studyIds, 0, $limit - count($quizIds));
+            }
+        }
+
+        $questions = [];
+        foreach ($this->quizBank->findByIds($quizIds, false) as $q) {
+            $id = (int) $q['id'];
+            $q['raw_id'] = $id;
+            $q['bank_id'] = 'quiz-' . $id;
+            $q['source_type'] = 'quiz';
+            $q['id'] = $q['bank_id'];
+            $questions[] = $q;
+        }
+        foreach ($this->mcqs->findByIds($studyIds, false) as $q) {
+            $id = (int) $q['id'];
+            $topic = trim((string) ($q['topic'] ?? $q['lecture_title'] ?? 'Study Tools'));
+            $questions[] = [
+                'id'           => 'study-' . $id,
+                'bank_id'      => 'study-' . $id,
+                'raw_id'       => $id,
+                'source_type'  => 'study',
+                'question'     => (string) $q['question'],
+                'option_a'     => $q['option_a'] ?? '',
+                'option_b'     => $q['option_b'] ?? '',
+                'option_c'     => $q['option_c'] ?? '',
+                'option_d'     => $q['option_d'] ?? '',
+                'option_e'     => $q['option_e'] ?? '',
+                'topic'        => $topic,
+                'subject'      => $topic,
+                'chapter'      => $topic,
+                'explanation'  => null,
+            ];
+        }
+        shuffle($questions);
+        $questions = array_slice($questions, 0, $limit);
         return [
-            'questions' => $this->quizBank->findByIds($ids, false),
-            'total'     => count($ids),
+            'questions' => $questions,
+            'total'     => count($questions),
         ];
     }
 

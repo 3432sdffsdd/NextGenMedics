@@ -242,6 +242,57 @@ export const studyMaterialService = {
     api.post('/student/study-material/watch', { resource_id: resourceId, watched: watched ? 1 : 0 }),
 }
 
+/** Teacher — full student performance profile */
+export const studentPerformanceService = {
+  list: (params = {}) => api.get('/teacher/student-performance', { params }),
+  show: (studentId) => api.get(`/teacher/student-performance/${studentId}`),
+}
+
+/** Automatic video tracking (student player + student dashboard) */
+export const videoTrackingService = {
+  resume: (resourceId) => api.get('/student/video-tracking/resume', { params: { resource_id: resourceId } }),
+  track: (data) => api.post('/student/video-tracking/track', data),
+  dashboard: () => api.get('/student/video-tracking/dashboard'),
+  videos: (params = {}) => api.get('/student/video-tracking/videos', { params }),
+}
+
+/** Personal Study Planner — LMS / Manual / Mixed plans (PHP only). */
+export const personalStudyPlannerService = {
+  bootstrap: () => api.get('/student/personal-planner'),
+  setup: (data) => api.post('/student/personal-planner/setup', data),
+  catalog: () => api.get('/student/personal-planner/catalog'),
+  dashboard: () => api.get('/student/personal-planner/dashboard'),
+  createPlan: (data) => api.post('/student/personal-planner/plans', data),
+  viewPlan: (id) => api.get(`/student/personal-planner/plans/${id}`),
+  resume: (id) => api.post(`/student/personal-planner/plans/${id}/resume`),
+  archive: (id) => api.post(`/student/personal-planner/plans/${id}/archive`),
+  duplicate: (id) => api.post(`/student/personal-planner/plans/${id}/duplicate`),
+  delete: (id) => api.post(`/student/personal-planner/plans/${id}/delete`),
+  setTask: (id, status) => api.patch(`/student/personal-planner/tasks/${id}`, { status }),
+  moveTask: (id, action) => api.post(`/student/personal-planner/tasks/${id}/move`, { action }),
+  calendar: (month) => api.get('/student/personal-planner/calendar', { params: { month } }),
+  day: (date) => api.get('/student/personal-planner/day', { params: { date } }),
+  history: () => api.get('/student/personal-planner/history'),
+  reset: () => api.post('/student/personal-planner/reset'),
+  export: (planId) => api.get('/student/personal-planner/export', { params: planId ? { plan_id: planId } : {} }),
+}
+
+/** Goal-based Study Planner — schedules real LMS lectures/quizzes/notes (PHP only). */
+export const goalStudyPlannerService = {
+  catalog: () => api.get('/student/study-planner/catalog'),
+  generate: (data) => api.post('/student/study-planner/generate', data),
+  dashboard: () => api.get('/student/study-planner/dashboard'),
+  calendar: (month) => api.get('/student/study-planner/calendar', { params: { month } }),
+  day: (date) => api.get('/student/study-planner/day', { params: { date } }),
+  setTask: (id, status) => api.patch(`/student/study-planner/tasks/${id}`, { status }),
+  rescheduleTask: (id, date) => api.post(`/student/study-planner/tasks/${id}/reschedule`, { date }),
+  resetToday: () => api.post('/student/study-planner/reset-today'),
+  handleMissed: () => api.post('/student/study-planner/missed'),
+  createChallenge: (data) => api.post('/student/study-planner/challenges', data),
+  reset: () => api.post('/student/study-planner/reset'),
+  export: () => api.get('/student/study-planner/export'),
+}
+
 /** Premium FCPS Study Planner — PHP algorithms only (no AI). */
 export const fcpsStudyPlannerService = {
   getPlan: () => api.get('/student/fcps-planner'),
@@ -250,6 +301,8 @@ export const fcpsStudyPlannerService = {
   dashboard: () => api.get('/student/fcps-planner/dashboard'),
   calendar: (month) => api.get('/student/fcps-planner/calendar', { params: { month } }),
   day: (date) => api.get('/student/fcps-planner/day', { params: { date } }),
+  updateExamDate: (data) => api.patch('/student/fcps-planner/exam-date', data),
+  updateDay: (data) => api.patch('/student/fcps-planner/day', data),
   setTask: (id, status) => api.patch(`/student/fcps-planner/tasks/${id}`, { status }),
   rescheduleTask: (id, date) => api.post(`/student/fcps-planner/tasks/${id}/reschedule`, { date }),
   resetToday: () => api.post('/student/fcps-planner/reset-today'),

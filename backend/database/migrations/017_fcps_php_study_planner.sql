@@ -5,7 +5,7 @@ SET NAMES utf8mb4;
 CREATE TABLE IF NOT EXISTS fcps_study_plans (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     student_id INT UNSIGNED NOT NULL,
-    exam_date DATE NOT NULL,
+    exam_date DATE NULL,
     start_date DATE NOT NULL,
     hours_per_day DECIMAL(4,1) NOT NULL DEFAULT 3.0,
     preferred_days JSON NOT NULL,

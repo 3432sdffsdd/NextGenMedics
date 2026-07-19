@@ -38,9 +38,10 @@ import WeakAreas from './pages/student/WeakAreas'
 import StudentProgress from './pages/student/StudentProgress'
 import QuestionBank from './pages/student/QuestionBank'
 import MyMistakes from './pages/student/MyMistakes'
-import StudyPlanner from './pages/student/StudyPlanner'
-import FcpsStudyPlanner from './pages/student/FcpsStudyPlanner'
+import VideoProgress from './pages/student/VideoProgress'
 import StudyMaterial from './pages/student/StudyMaterial'
+import PersonalStudyPlanner from './pages/student/PersonalStudyPlanner'
+import StudentPerformance from './pages/teacher/StudentPerformance'
 import TimetablePage from './pages/shared/TimetablePage'
 import FloatingWhatsApp from './components/common/FloatingWhatsApp'
 import NotFound from './pages/NotFound'
@@ -102,6 +103,8 @@ export default function App() {
               <Route path="dashboard" element={<TeacherDashboard />} />
               <Route path="courses" element={<TeacherCourses />} />
               <Route path="courses/:id" element={<TeacherCourseHub />} />
+              <Route path="student-performance" element={<StudentPerformance />} />
+              <Route path="video-analytics" element={<Navigate to="/teacher/student-performance" replace />} />
               <Route path="timetable" element={<TimetablePage title="My Class Timetable" />} />
             </Route>
 
@@ -122,9 +125,13 @@ export default function App() {
               <Route path="weak-areas" element={<WeakAreas />} />
               <Route path="question-bank" element={<QuestionBank />} />
               <Route path="study-material" element={<StudyMaterial />} />
+              <Route path="video-progress" element={<VideoProgress />} />
               <Route path="mistakes" element={<MyMistakes />} />
-              <Route path="planner" element={<StudyPlanner />} />
-              <Route path="fcps-planner" element={<FcpsStudyPlanner />} />
+              <Route path="personal-planner" element={<Navigate to="/student/dashboard" replace />} />
+              <Route path="planner" element={<Navigate to="/student/dashboard" replace />} />
+              <Route path="study-planner" element={<Navigate to="/student/dashboard" replace />} />
+              {/* FCPS Study Planner = Personal planner with LMS / Manual / Mixed modes */}
+              <Route path="fcps-planner" element={<PersonalStudyPlanner />} />
               <Route path="flashcards" element={<FlashcardCenter />} />
               <Route path="revision" element={<Navigate to="/student/study-pack" replace />} />
               <Route path="study-pack" element={<StudyPack />} />

@@ -181,6 +181,113 @@ class StudyPlannerService
         return $this->dayDetail($studentId, $today);
     }
 
+    /**
+     * Update or clear FCPS exam date (countdown). Optionally regenerate the whole schedule.
+     *
+     * @param string|null $examDate YYYY-MM-DD, or null/empty to clear countdown
+     */
+    public function updateExamDate(int $studentId, ?string $examDate, bool $regenerate = false): array
+    {
+        $plan = $this->requirePlan($studentId);
+        $examDate = $examDate !== null ? trim($examDate) : '';
+        if ($examDate === '') {
+            $examDate = null;
+        } else {
+            $ts = strtotime($examDate);
+            if ($ts === false) {
+                throw new \InvalidArgumentException('Invalid exam date');
+            }
+            $examDate = date('Y-m-d', $ts);
+        }
+
+        if ($regenerate) {
+            if ($examDate === null) {
+                throw new \InvalidArgumentException('Exam date is required to regenerate the plan');
+            }
+            return $this->generate($studentId, array_merge($this->publicPlan($plan), ['exam_date' => $examDate]));
+        }
+
+        try {
+            $this->repo->updateExamDate((int) $plan['id'], $examDate);
+        } catch (\PDOException $e) {
+            if ($examDate === null) {
+                throw new \RuntimeException(
+                    'Could not clear exam date. Run: ALTER TABLE fcps_study_plans MODIFY exam_date DATE NULL;'
+                );
+            }
+            throw $e;
+        }
+
+        $msg = $examDate
+            ? "Exam date updated to {$examDate}."
+            : 'Exam countdown cleared.';
+        $this->repo->addHistory((int) $plan['id'], $studentId, 'exam_date', $msg, ['exam_date' => $examDate]);
+
+        $fresh = $this->repo->getPlanById((int) $plan['id'], $studentId);
+        return [
+            'plan'      => $this->publicPlan($fresh),
+            'dashboard' => $this->stats->dashboard((int) $plan['id'], $studentId),
+        ];
+    }
+
+    public function updateDay(int $studentId, string $date, array $input): array
+    {
+        $plan = $this->requirePlan($studentId);
+        $planId = (int) $plan['id'];
+        $day = $this->repo->getDay($planId, $date);
+        if (!$day) {
+            throw new \RuntimeException('Plan day not found for that date');
+        }
+
+        $fields = [];
+        if (array_key_exists('topics', $input)) {
+            $topics = $input['topics'];
+            if (is_string($topics)) {
+                $topics = array_values(array_filter(array_map('trim', preg_split('/[,;\n]+/', $topics) ?: [])));
+            }
+            if (!is_array($topics)) {
+                $topics = [];
+            }
+            $fields['topics'] = array_values(array_map('strval', $topics));
+        }
+        if (array_key_exists('mcq_target', $input)) {
+            $fields['mcq_target'] = max(0, min(500, (int) $input['mcq_target']));
+        }
+        if (array_key_exists('flashcard_target', $input)) {
+            $fields['flashcard_target'] = max(0, min(500, (int) $input['flashcard_target']));
+        }
+        if (array_key_exists('revision_subject', $input)) {
+            $rev = trim((string) $input['revision_subject']);
+            $fields['revision_subject'] = $rev !== '' ? $rev : null;
+        }
+        if (array_key_exists('notes', $input)) {
+            $notes = trim((string) $input['notes']);
+            $fields['notes'] = $notes !== '' ? $notes : null;
+        }
+        if (array_key_exists('is_study_day', $input)) {
+            $fields['is_study_day'] = !empty($input['is_study_day']);
+        }
+        if (array_key_exists('weekly_goal', $input)) {
+            $wg = trim((string) $input['weekly_goal']);
+            $fields['weekly_goal'] = $wg !== '' ? $wg : null;
+        }
+
+        if (!$fields) {
+            throw new \InvalidArgumentException('No day fields to update');
+        }
+
+        $this->repo->updateDay((int) $day['id'], $planId, $fields);
+        if (isset($fields['mcq_target'])) {
+            $this->repo->updateTaskTargetsForDay((int) $day['id'], 'mcq', $fields['mcq_target']);
+        }
+        if (isset($fields['flashcard_target'])) {
+            $this->repo->updateTaskTargetsForDay((int) $day['id'], 'flashcard', $fields['flashcard_target']);
+        }
+        $this->repo->addHistory($planId, $studentId, 'edit_day', "Edited plan day {$date}", ['date' => $date]);
+
+        return $this->dayDetail($studentId, $date);
+    }
+
     public function handleMissed(int $studentId): array
     {
         $plan = $this->requirePlan($studentId);
@@ -370,6 +477,7 @@ class StudyPlannerService
             'flashcard_target' => (int) $day['flashcard_target'],
             'revision_subject' => $day['revision_subject'],
             'weekly_goal'      => $day['weekly_goal'] ?? null,
+            'notes'            => $day['notes'] ?? null,
             'completed_pct'    => (float) $day['completed_pct'],
             'counts'           => $counts,
             'task_count'       => count($tasks),

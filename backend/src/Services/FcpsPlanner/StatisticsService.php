@@ -17,8 +17,13 @@ class StatisticsService
             return [];
         }
         $today = date('Y-m-d');
-        $exam = $plan['exam_date'];
-        $countdown = $exam < $today ? 0 : (int) (new \DateTimeImmutable($today))->diff(new \DateTimeImmutable($exam))->days;
+        $exam = $plan['exam_date'] ?: null;
+        $countdown = null;
+        if ($exam) {
+            $countdown = $exam < $today
+                ? 0
+                : (int) (new \DateTimeImmutable($today))->diff(new \DateTimeImmutable($exam))->days;
+        }
 
         $todayTasks = $this->repo->tasksForDate($planId, $today);
         $byType = ['study' => [], 'mcq' => [], 'flashcard' => [], 'revision' => []];

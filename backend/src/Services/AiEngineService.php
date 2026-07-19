@@ -82,7 +82,7 @@ class AiEngineService
     {
         $options = [
             'flashcards' => 30,
-            'mcqs'       => 30,
+            'mcqs'       => 0, // MCQs are teacher-uploaded only (Study Tools manual / quiz bank)
             'viva'       => 10,
             'cases'      => 5,
             'model'      => $this->gemini->model(),
@@ -509,61 +509,10 @@ class AiEngineService
 
     private function runMcqs(array $job, array $stage, string $text): void
     {
-        $target = max(1, (int) ($stage['target'] ?: 30));
-        $done = (int) ($stage['done'] ?? 0);
-        if ($done === 0) {
-            $this->mcqs->deleteAllByLecture((int) $job['lecture_id']);
-        }
-        $remaining = $target - $done;
-        if ($remaining <= 0) {
-            $this->completeStage($job, $stage);
-            return;
-        }
-
-        $batch = min(self::MCQ_BATCH, $remaining);
-        $data = $this->callJson($job, $stage, 'mcqs', $this->compactContext($job, $text), [
-            'count' => $batch,
-            'avoid' => $this->mcqs->existingQuestions((int) $job['lecture_id']),
-        ]);
-        $questions = is_array($data['mcqs'] ?? null) ? $data['mcqs'] : [];
-        $normalized = [];
-        foreach ($questions as $q) {
-            $question = trim((string) ($q['question'] ?? ''));
-            $options = $q['options'] ?? [];
-            $correct = strtoupper(trim((string) ($q['correct_option'] ?? '')));
-            if ($question === '' || !is_array($options) || !in_array($correct, ['A', 'B', 'C', 'D', 'E'], true)) {
-                continue;
-            }
-            $normalized[] = [
-                'question' => $question,
-                'option_a' => trim((string) ($options['A'] ?? '')),
-                'option_b' => trim((string) ($options['B'] ?? '')),
-                'option_c' => trim((string) ($options['C'] ?? '')),
-                'option_d' => trim((string) ($options['D'] ?? '')),
-                'option_e' => trim((string) ($options['E'] ?? '')),
-                'correct_option' => $correct,
-                'explanation' => trim((string) ($q['explanation'] ?? '')),
-                'option_explanations' => is_array($q['option_explanations'] ?? null) ? $q['option_explanations'] : null,
-                'topic' => trim((string) ($q['topic'] ?? '')),
-                'difficulty' => $this->difficulty($q['difficulty'] ?? 'moderate'),
-            ];
-        }
-        $inserted = $this->mcqs->insertMany(
-            (int) $job['lecture_id'],
-            $job['course_id'] ? (int) $job['course_id'] : null,
-            $job['requested_by'] ? (int) $job['requested_by'] : null,
-            $normalized
-        );
-        $newDone = min($target, $done + max($inserted, 1));
-        $usage = $data['_usage'] ?? [];
-        if ($newDone >= $target) {
-            $this->stages->updateProgress((int) $stage['id'], $newDone, 100, $usage);
-            $this->completeStage($job, $stage, $usage);
-        } else {
-            $this->stages->updateProgress((int) $stage['id'], $newDone, (int) round(100 * $newDone / $target), $usage);
-            $this->accumulateJobUsage((int) $job['id'], $usage);
-            $this->syncJobProgress((int) $job['id']);
-        }
+        // AI no longer generates MCQs — teachers upload them manually in Study Tools.
+        // Skip legacy jobs that still have an MCQ stage without deleting teacher MCQs.
+        $this->stages->updateProgress((int) $stage['id'], (int) ($stage['target'] ?: 0), 100, []);
+        $this->completeStage($job, $stage, []);
     }
 
     private function runClinicalCases(array $job, array $stage, string $text): void

@@ -81,7 +81,7 @@ export default function QuestionBank() {
     <div>
       <h2 className="font-display text-2xl font-bold text-navy">Question Bank</h2>
       <p className="text-sm text-slate-500">
-        Practice MCQs from your teachers&apos; published quizzes. Wrong answers also appear in My Mistakes.
+        Practice MCQs from teacher quizzes and Study Tools manual uploads. Wrong answers also appear in My Mistakes.
       </p>
 
       <div className="mt-6 grid gap-4 rounded-2xl border border-slate-100 bg-white p-5 shadow-soft lg:grid-cols-3">

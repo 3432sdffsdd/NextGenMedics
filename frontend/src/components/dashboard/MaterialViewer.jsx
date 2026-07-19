@@ -282,6 +282,7 @@ export default function MaterialViewer({ resource, allowVideoDownload = true }) 
         fileSize={resource.file_size}
         title={resource.title}
         allowVideoDownload={allowVideoDownload}
+        resourceId={resource.id || null}
       />
     )
   }

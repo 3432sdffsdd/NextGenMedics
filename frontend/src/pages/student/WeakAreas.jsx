@@ -139,8 +139,22 @@ export default function WeakAreas() {
                   <li key={`${item.question_id}-${item.date_attempted}`} className="rounded-xl border border-slate-100 p-4 text-sm">
                     <p className="font-medium text-navy">{item.question}</p>
                     <div className="mt-2 grid gap-1 text-xs text-slate-500 sm:grid-cols-2">
-                      <p>Your answer: <span className="font-semibold text-red-500">{item.student_answer || '—'}</span></p>
-                      <p>Correct: <span className="font-semibold text-green-600">{item.correct_answer || '—'}</span></p>
+                      <p>
+                        You chose:{' '}
+                        <span className="font-semibold text-red-500">
+                          {item.student_answer
+                            ? `${item.student_answer}${item.options?.[item.student_answer] ? ` — ${item.options[item.student_answer]}` : ''}`
+                            : 'No answer selected'}
+                        </span>
+                      </p>
+                      <p>
+                        Correct answer:{' '}
+                        <span className="font-semibold text-green-600">
+                          {item.correct_answer
+                            ? `${item.correct_answer}${item.options?.[item.correct_answer] ? ` — ${item.options[item.correct_answer]}` : ''}`
+                            : '—'}
+                        </span>
+                      </p>
                       <p>Topic: {item.topic || item.chapter || item.subject || '—'}</p>
                       <p>Source: {item.source === 'daily' ? 'Daily Challenge' : item.source === 'quiz' ? 'Course Quiz' : (item.source || '—')}</p>
                       <p>Date: {item.date_attempted ? new Date(item.date_attempted).toLocaleDateString() : '—'}</p>

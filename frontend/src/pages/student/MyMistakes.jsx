@@ -4,8 +4,10 @@ import { premiumStudyService } from '../../services/api'
 import Alert from '../../components/dashboard/Alert'
 import McqPlayer from '../../components/dashboard/McqPlayer'
 import StatCard from '../../components/dashboard/StatCard'
+import { useToast } from '../../context/ToastContext'
 
 export default function MyMistakes() {
+  const toast = useToast()
   const [stats, setStats] = useState(null)
   const [items, setItems] = useState([])
   const [total, setTotal] = useState(0)
@@ -13,6 +15,7 @@ export default function MyMistakes() {
   const [filters, setFilters] = useState({ subject: '', chapter: '', topic: '', date_from: '', date_to: '' })
   const [loading, setLoading] = useState(true)
   const [practice, setPractice] = useState(null)
+  const [startingPractice, setStartingPractice] = useState(false)
 
   const load = (p = 1) => {
     setLoading(true)
@@ -24,18 +27,29 @@ export default function MyMistakes() {
         setStats(st.data.data)
         setItems(list.data.data?.items || [])
         setTotal(list.data.data?.total || 0)
+        setPage(p)
       })
+      .catch((err) => toast.error(err.response?.data?.message || 'Could not load mistakes'))
       .finally(() => setLoading(false))
   }
 
-  useEffect(load, [])
+  useEffect(() => { load(1) }, [])
 
-  const startPractice = () => {
-    premiumStudyService.mistakesPractice({ limit: 20 })
-      .then(({ data }) => {
-        const qs = data.data?.questions || []
-        if (qs.length) setPractice(qs)
-      })
+  const startPractice = async () => {
+    setStartingPractice(true)
+    try {
+      const { data } = await premiumStudyService.mistakesPractice({ limit: 20 })
+      const qs = data.data?.questions || []
+      if (!qs.length) {
+        toast.info('No remaining mistakes to practice yet')
+        return
+      }
+      setPractice(qs)
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not start practice')
+    } finally {
+      setStartingPractice(false)
+    }
   }
 
   if (practice) {
@@ -58,7 +72,9 @@ export default function MyMistakes() {
           <h2 className="font-display text-2xl font-bold text-navy">My Mistakes</h2>
           <p className="text-sm text-slate-500">Wrong answers from course quizzes and Daily Challenges appear here. Practice them to improve weak topics.</p>
         </div>
-        <button type="button" onClick={startPractice} className="btn-primary text-sm"><FiPlay className="inline mr-1" /> Practice My Mistakes</button>
+        <button type="button" onClick={startPractice} disabled={startingPractice} className="btn-primary text-sm disabled:opacity-50">
+          <FiPlay className="inline mr-1" /> {startingPractice ? 'Loading…' : 'Practice My Mistakes'}
+        </button>
       </div>
 
       {stats && (
@@ -67,6 +83,12 @@ export default function MyMistakes() {
           <StatCard label="Remaining" value={stats.remaining || 0} icon={FiAlertCircle} tone="red" />
           <StatCard label="Mastered" value={stats.mastered || 0} icon={FiCheckCircle} tone="emerald" />
         </div>
+      )}
+      {stats && (
+        <p className="mt-2 text-xs text-slate-400">
+          Remaining = still wrong · Mastered = cleared by practicing · List below shows remaining only
+          {total > 0 ? ` · ${total} shown` : ''}
+        </p>
       )}
 
       <div className="mt-6 grid gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-soft sm:grid-cols-2 lg:grid-cols-4">
@@ -95,6 +117,25 @@ export default function MyMistakes() {
                           : 'Course Quiz'}
                   </span>
                 )}
+              </div>
+              <div className="mt-3 space-y-1 rounded-xl bg-slate-50 px-3 py-2 text-sm">
+                <p>
+                  <span className="text-slate-500">You chose: </span>
+                  {m.selected_option ? (
+                    <span className="font-semibold text-red-600">
+                      {m.selected_option}{m.selected_option_text ? ` — ${m.selected_option_text}` : ''}
+                    </span>
+                  ) : (
+                    <span className="font-semibold text-slate-500">No answer selected</span>
+                  )}
+                </p>
+                <p>
+                  <span className="text-slate-500">Correct answer: </span>
+                  <span className="font-semibold text-emerald-600">
+                    {m.correct_option || '—'}
+                    {m.correct_option_text ? ` — ${m.correct_option_text}` : ''}
+                  </span>
+                </p>
               </div>
               {m.explanation && (
                 <p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-600"><span className="font-semibold">Explanation:</span> {m.explanation}</p>

@@ -22,7 +22,11 @@ use App\Controllers\MediaController;
 use App\Controllers\NotificationController;
 use App\Controllers\ProgressController;
 use App\Controllers\StudyMaterialController;
+use App\Controllers\VideoTrackingController;
+use App\Controllers\StudentPerformanceController;
 use App\Controllers\FcpsStudyPlannerController;
+use App\Controllers\GoalStudyPlannerController;
+use App\Controllers\PersonalStudyPlannerController;
 use App\Controllers\PremiumStudyController;
 use App\Controllers\PublicController;
 use App\Controllers\QuizController;
@@ -297,6 +301,50 @@ $router->get('/student/study-material/summary', [StudyMaterialController::class,
 $router->get('/student/study-material', [StudyMaterialController::class, 'list'], $student);
 $router->post('/student/study-material/watch', [StudyMaterialController::class, 'toggleWatch'], $student);
 
+// ── Automatic video tracking & analytics ───────────────────
+$router->get('/student/video-tracking/resume', [VideoTrackingController::class, 'resume'], $student);
+$router->post('/student/video-tracking/track', [VideoTrackingController::class, 'track'], $student);
+$router->get('/student/video-tracking/dashboard', [VideoTrackingController::class, 'dashboard'], $student);
+$router->get('/student/video-tracking/videos', [VideoTrackingController::class, 'videos'], $student);
+$teacher = array_merge($auth, [RoleMiddleware::teacher()]);
+// ── Teacher Student Performance (full profile + per-student video analytics) ─
+$router->get('/teacher/student-performance', [StudentPerformanceController::class, 'list'], $teacher);
+$router->get('/teacher/student-performance/{studentId}', [StudentPerformanceController::class, 'show'], $teacher);
+
+// ── Goal-based Study Planner (uses real LMS lectures/quizzes/notes) ─
+$router->get('/student/study-planner/catalog', [GoalStudyPlannerController::class, 'catalog'], $student);
+$router->post('/student/study-planner/generate', [GoalStudyPlannerController::class, 'generate'], $student);
+$router->get('/student/study-planner/dashboard', [GoalStudyPlannerController::class, 'dashboard'], $student);
+$router->get('/student/study-planner/calendar', [GoalStudyPlannerController::class, 'calendar'], $student);
+$router->get('/student/study-planner/day', [GoalStudyPlannerController::class, 'day'], $student);
+$router->patch('/student/study-planner/tasks/{id}', [GoalStudyPlannerController::class, 'setTask'], $student);
+$router->post('/student/study-planner/tasks/{id}/reschedule', [GoalStudyPlannerController::class, 'reschedule'], $student);
+$router->post('/student/study-planner/reset-today', [GoalStudyPlannerController::class, 'resetToday'], $student);
+$router->post('/student/study-planner/missed', [GoalStudyPlannerController::class, 'missed'], $student);
+$router->post('/student/study-planner/challenges', [GoalStudyPlannerController::class, 'createChallenge'], $student);
+$router->post('/student/study-planner/reset', [GoalStudyPlannerController::class, 'reset'], $student);
+$router->get('/student/study-planner/export', [GoalStudyPlannerController::class, 'export'], $student);
+
+// ── Personal Study Planner (LMS / Manual / Mixed — PHP only) ─
+$router->get('/student/personal-planner', [PersonalStudyPlannerController::class, 'bootstrap'], $student);
+$router->post('/student/personal-planner/setup', [PersonalStudyPlannerController::class, 'setup'], $student);
+$router->get('/student/personal-planner/catalog', [PersonalStudyPlannerController::class, 'catalog'], $student);
+$router->get('/student/personal-planner/dashboard', [PersonalStudyPlannerController::class, 'dashboard'], $student);
+$router->post('/student/personal-planner/plans', [PersonalStudyPlannerController::class, 'createPlan'], $student);
+$router->get('/student/personal-planner/plans/{id}', [PersonalStudyPlannerController::class, 'viewPlan'], $student);
+$router->post('/student/personal-planner/plans/{id}/resume', [PersonalStudyPlannerController::class, 'resume'], $student);
+$router->post('/student/personal-planner/plans/{id}/archive', [PersonalStudyPlannerController::class, 'archive'], $student);
+$router->post('/student/personal-planner/plans/{id}/duplicate', [PersonalStudyPlannerController::class, 'duplicate'], $student);
+$router->delete('/student/personal-planner/plans/{id}', [PersonalStudyPlannerController::class, 'delete'], $student);
+$router->post('/student/personal-planner/plans/{id}/delete', [PersonalStudyPlannerController::class, 'delete'], $student);
+$router->patch('/student/personal-planner/tasks/{id}', [PersonalStudyPlannerController::class, 'setTask'], $student);
+$router->post('/student/personal-planner/tasks/{id}/move', [PersonalStudyPlannerController::class, 'moveTask'], $student);
+$router->get('/student/personal-planner/calendar', [PersonalStudyPlannerController::class, 'calendar'], $student);
+$router->get('/student/personal-planner/day', [PersonalStudyPlannerController::class, 'day'], $student);
+$router->get('/student/personal-planner/history', [PersonalStudyPlannerController::class, 'history'], $student);
+$router->post('/student/personal-planner/reset', [PersonalStudyPlannerController::class, 'reset'], $student);
+$router->get('/student/personal-planner/export', [PersonalStudyPlannerController::class, 'export'], $student);
+
 // ── Premium FCPS Study Planner (PHP algorithms only — no AI) ─
 $router->get('/student/fcps-planner', [FcpsStudyPlannerController::class, 'getPlan'], $student);
 $router->post('/student/fcps-planner/generate', [FcpsStudyPlannerController::class, 'generate'], $student);
@@ -304,6 +352,8 @@ $router->post('/student/fcps-planner/regenerate', [FcpsStudyPlannerController::c
 $router->get('/student/fcps-planner/dashboard', [FcpsStudyPlannerController::class, 'dashboard'], $student);
 $router->get('/student/fcps-planner/calendar', [FcpsStudyPlannerController::class, 'calendar'], $student);
 $router->get('/student/fcps-planner/day', [FcpsStudyPlannerController::class, 'day'], $student);
+$router->patch('/student/fcps-planner/exam-date', [FcpsStudyPlannerController::class, 'updateExamDate'], $student);
+$router->patch('/student/fcps-planner/day', [FcpsStudyPlannerController::class, 'updateDay'], $student);
 $router->patch('/student/fcps-planner/tasks/{id}', [FcpsStudyPlannerController::class, 'setTask'], $student);
 $router->post('/student/fcps-planner/tasks/{id}/reschedule', [FcpsStudyPlannerController::class, 'rescheduleTask'], $student);
 $router->post('/student/fcps-planner/reset-today', [FcpsStudyPlannerController::class, 'resetToday'], $student);
